@@ -20,6 +20,8 @@ const state = {
   trickAnimReady: false,
   seenTrickCardIds: new Set(),
   animatingPlayIds: new Set(),
+  seenBustKeys: new Set(),
+  explodingBustKeys: new Set(),
   lastRound: 1,
   error: "",
   toast: "",
@@ -31,58 +33,112 @@ const state = {
 
 const app = document.getElementById("app");
 
-const CARD_FLIP_MP3 = "/sounds/card-flip.mp3";
-const CARD_FLIP_OGG = "/sounds/card-flip.ogg";
-const flipPool = [];
-let cardAudioUnlocked = false;
+const SOUND_SRCS = {
+  flip: ["/sounds/card-flip.ogg", "/sounds/card-flip.mp3"],
+  click: ["/sounds/ui-click.ogg", "/sounds/ui-click.mp3"],
+};
+const soundBank = {
+  flip: { buffer: null, start: 0, fallback: [], volume: 0.55 },
+  click: { buffer: null, start: 0, fallback: [], volume: 0.32 },
+};
+let audioCtx = null;
+let soundsLoading = false;
 
-function makeCardFlipAudio() {
+function getAudioCtx() {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return null;
+  if (!audioCtx) audioCtx = new AC();
+  if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
+  return audioCtx;
+}
+
+function audibleStart(buffer, threshold = 0.012) {
+  const ch = buffer.getChannelData(0);
+  const minOff = Math.min(ch.length, Math.floor(buffer.sampleRate * 0.08));
+  for (let i = 0; i < minOff; i++) {
+    if (Math.abs(ch[i]) > threshold) return Math.max(0, i / buffer.sampleRate);
+  }
+  return 0;
+}
+
+async function decodeSound(urls) {
+  const ctx = getAudioCtx();
+  if (!ctx) return null;
+  for (const url of urls) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const raw = await res.arrayBuffer();
+      const buffer = await ctx.decodeAudioData(raw.slice(0));
+      return { buffer, start: audibleStart(buffer) };
+    } catch {
+      /* try next format */
+    }
+  }
+  return null;
+}
+
+function makeFallbackAudio(urls) {
   const a = new Audio();
-  if (a.canPlayType("audio/mpeg")) a.src = CARD_FLIP_MP3;
-  else a.src = CARD_FLIP_OGG;
+  const preferMp3 = a.canPlayType("audio/mpeg");
+  a.src = preferMp3 ? (urls.find((u) => u.endsWith(".mp3")) || urls[0]) : urls[0];
   a.preload = "auto";
-  a.volume = 0.4;
   return a;
 }
 
-function unlockCardAudio() {
-  if (cardAudioUnlocked) return;
-  const a = flipPool[0] || (flipPool[0] = makeCardFlipAudio());
-  const vol = a.volume;
-  a.volume = 0;
-  const p = a.play();
-  if (p && p.then) {
-    p.then(() => {
-      a.pause();
-      a.currentTime = 0;
-      a.volume = vol || 0.4;
-      cardAudioUnlocked = true;
-    }).catch(() => {
-      a.volume = vol || 0.4;
-    });
-  } else {
-    a.volume = vol || 0.4;
+function loadSounds() {
+  if (soundsLoading) return;
+  soundsLoading = true;
+  getAudioCtx();
+  Object.keys(SOUND_SRCS).forEach((key) => {
+    decodeSound(SOUND_SRCS[key]).then((decoded) => {
+      if (decoded) {
+        soundBank[key].buffer = decoded.buffer;
+        soundBank[key].start = decoded.start;
+      }
+    }).catch(() => {});
+  });
+}
+
+function unlockAudio() {
+  getAudioCtx();
+  loadSounds();
+}
+
+function playSound(key) {
+  try {
+    unlockAudio();
+    const entry = soundBank[key];
+    if (!entry) return;
+    const ctx = audioCtx;
+    if (ctx && entry.buffer) {
+      const src = ctx.createBufferSource();
+      const gain = ctx.createGain();
+      src.buffer = entry.buffer;
+      gain.gain.value = entry.volume;
+      src.connect(gain).connect(ctx.destination);
+      src.start(0, entry.start);
+      return;
+    }
+    let a = entry.fallback.find((x) => x.paused || x.ended);
+    if (!a) {
+      if (entry.fallback.length >= 3) a = entry.fallback[0];
+      else {
+        a = makeFallbackAudio(SOUND_SRCS[key]);
+        entry.fallback.push(a);
+      }
+    }
+    a.volume = entry.volume;
+    const skip = entry.start || 0;
+    try { a.currentTime = skip; } catch { /* some browsers block until loaded */ }
+    a.play().catch(() => {});
+  } catch {
+    /* never block the game */
   }
 }
 
-function playCardFlip() {
-  try {
-    unlockCardAudio();
-    let a = flipPool.find((x) => x.paused || x.ended);
-    if (!a) {
-      if (flipPool.length >= 3) a = flipPool[0];
-      else {
-        a = makeCardFlipAudio();
-        flipPool.push(a);
-      }
-    }
-    a.volume = 0.4;
-    a.currentTime = 0;
-    a.play().catch(() => {});
-  } catch {
-    /* autoplay or missing file should never block play */
-  }
-}
+function playCardFlip() { playSound("flip"); }
+function playUiClick() { playSound("click"); }
 
 function pathCode() {
   const m = location.pathname.match(/^\/r\/([A-Za-z0-9]+)/i);
@@ -245,10 +301,16 @@ function onMessage(msg) {
       state.trickAnimReady = false;
       state.seenTrickCardIds = new Set();
       state.animatingPlayIds = new Set();
+      state.seenBustKeys = new Set();
+      state.explodingBustKeys = new Set();
     } else {
       state.screen = state.screen === "rules" ? "rules" : "play";
       if (state.screen !== "rules") state.rulesReturn = "play";
-      if (prevRound && msg.round !== prevRound) state.bidValue = null;
+      if (prevRound && msg.round !== prevRound) {
+        state.bidValue = null;
+        state.seenBustKeys = new Set();
+        state.explodingBustKeys = new Set();
+      }
       if (msg.phase === "bidding" && state.bidValue != null && state.bidValue > msg.cardsDealt) state.bidValue = null;
       if (msg.phase !== "playing" || !msg.isMyTurn) state.selectedCardId = null;
       else if (state.selectedCardId && !(msg.legalCardIds || []).includes(state.selectedCardId)) {
@@ -362,7 +424,7 @@ function discardSavedGame() {
 }
 
 // Event delegation
-app.addEventListener("pointerdown", unlockCardAudio, { passive: true });
+app.addEventListener("pointerdown", unlockAudio, { passive: true });
 app.addEventListener("click", (e) => {
   const t = e.target.closest("[data-act]");
   if (!t) return;
@@ -370,6 +432,9 @@ app.addEventListener("click", (e) => {
   if (t.classList.contains("overlay") && e.target.closest("[data-stop]")) return;
   const act = t.dataset.act;
   const view = state.view;
+  const cardActs = act === "inspect" || act === "select-card" || act === "play-card";
+  const silentActs = act === "close-inspect" && t.classList.contains("overlay");
+  if (!cardActs && !silentActs) playUiClick();
   if (act === "create") createRoom();
   else if (act === "join") joinRoom();
   else if (act === "rules") openRules();
@@ -736,16 +801,29 @@ function signed(n) {
 
 
 function playerSeatStatus(p, v) {
-  const bidding = v.phase === "bidding";
-  let st;
-  if (bidding) st = p.hasBid ? "已叫牌" : "考慮緊…";
-  else if (v.bidsRevealed) st = `叫 ${p.bid} · 贏 ${p.tricksWon}`;
-  else st = `${p.handCount} 張`;
   if (!p.isAI && v.lobbyPlayers) {
     const h = v.lobbyPlayers.find((x) => x.id === p.id);
-    if (h && !h.connected) st = "已斷線";
+    if (h && !h.connected) return "已斷線";
   }
-  return st;
+  const bidding = v.phase === "bidding";
+  if (bidding) return p.hasBid ? "已叫牌" : "考慮緊…";
+  if (v.bidsRevealed) return "";
+  return `${p.handCount} 張`;
+}
+
+function seatBidLine(p, v) {
+  if (!v.bidsRevealed || p.bid == null) {
+    return { html: "", busted: false, explode: false };
+  }
+  const busted = p.tricksWon > p.bid;
+  const explode = busted && markBustExplode(p, v);
+  const html = `<div class="seat-bidline${busted ? " busted" : ""}" aria-label="叫 ${p.bid} 贏 ${p.tricksWon}${busted ? "，爆咗" : ""}">
+    <span class="bid-call">叫 ${p.bid}</span>
+    <span class="bid-sep">／</span>
+    <span class="bid-won">贏 ${p.tricksWon}</span>
+    ${busted ? `<span class="bust-tag">爆咗</span>` : ""}
+  </div>`;
+  return { html, busted, explode };
 }
 
 function isPlayerThinking(p, v) {
@@ -780,6 +858,18 @@ function resetTrickAnim() {
   state.trickAnimReady = false;
   state.seenTrickCardIds = new Set();
   state.animatingPlayIds = new Set();
+  state.seenBustKeys = new Set();
+  state.explodingBustKeys = new Set();
+}
+
+function markBustExplode(p, v) {
+  const key = `${v.round}:${p.id}`;
+  if (state.explodingBustKeys.has(key)) return true;
+  if (state.seenBustKeys.has(key)) return false;
+  state.seenBustKeys.add(key);
+  state.explodingBustKeys.add(key);
+  setTimeout(() => state.explodingBustKeys.delete(key), 800);
+  return true;
 }
 
 function syncTrickAnim(v) {
@@ -831,6 +921,7 @@ function circleTableHTML(v) {
     const isMe = p.id === v.yourId;
     const win = v.phase === "trickResult" && !destroyed && playerIndex === v.lastWinnerIndex;
     const st = playerSeatStatus(p, v);
+    const bidLine = seatBidLine(p, v);
     let card = "";
     if (played) {
       const slam = isJustPlayed(played.card.id) ? " slam" : "";
@@ -842,17 +933,22 @@ function circleTableHTML(v) {
       card = `<div class="seat-card empty"><div class="card-slot" aria-hidden="true"></div></div>`;
     }
     const celebrate = win ? " winner-celebrate" : "";
-    return `<div class="seat ${thinking ? "thinking" : ""} ${isMe ? "is-me" : ""} ${win ? "winner" : ""}${celebrate} ${p.isAI ? "ai-seat" : ""}"
-      style="left:${x.toFixed(2)}%;top:${y.toFixed(2)}%;--rot:${rot}deg;z-index:${win ? 7 : thinking ? 6 : 2}">
+    const bustCls = bidLine.busted ? " busted" : "";
+    const boomCls = bidLine.explode ? " bust-explode" : "";
+    const z = bidLine.explode ? 8 : win ? 7 : thinking ? 6 : 2;
+    return `<div class="seat ${thinking ? "thinking" : ""} ${isMe ? "is-me" : ""} ${win ? "winner" : ""}${celebrate}${bustCls}${boomCls} ${p.isAI ? "ai-seat" : ""}"
+      style="left:${x.toFixed(2)}%;top:${y.toFixed(2)}%;--rot:${rot}deg;z-index:${z}">
       ${card}
+      ${bidLine.explode ? `<div class="bust-burst" aria-hidden="true"></div>` : ""}
       <div class="seat-info">
-        <div class="avatar ${thinking ? "gold" : p.isAI ? "ai" : ""} ${win ? "win-ring" : ""}">${escapeHtml(p.name.slice(0, 1))}</div>
+        <div class="avatar ${thinking ? "gold" : p.isAI ? "ai" : ""} ${win ? "win-ring" : ""}${bidLine.busted ? " bust-avatar" : ""}">${escapeHtml(p.name.slice(0, 1))}</div>
         <div class="seat-meta">
           <div class="nm-row">
             <span class="nm">${escapeHtml(p.name)}${isMe ? "（你）" : ""}</span>
             ${thinking ? `<span class="seat-thinking">諗緊</span>` : ""}
           </div>
-          <div class="seat-sub"><span class="st">${escapeHtml(st)}</span><span class="sc">${p.score} 分</span></div>
+          ${bidLine.html}
+          <div class="seat-sub">${st ? `<span class="st">${escapeHtml(st)}</span>` : ""}<span class="sc">${p.score} 分</span></div>
         </div>
       </div>
     </div>`;
@@ -956,7 +1052,7 @@ function renderTable() {
   const canPlay = v.isMyTurn && v.phase === "playing";
   const handCards = v.myHand || [];
   const overlap = handOverlap(handCards.length);
-  const hand = `<div class="hand">${handCards
+  const hand = `<div class="hand-scroll"><div class="hand">${handCards
     .map((c, i) => {
       const isLegal = canPlay && legal.has(c.id);
       const dim = canPlay && !legal.has(c.id);
@@ -978,7 +1074,7 @@ function renderTable() {
         ${info}
       </div>`;
     })
-    .join("")}</div>`;
+    .join("")}</div></div>`;
 
   const skipTrick = v.phase === "trickResult"
     ? `<div class="next-trick"><button class="btn btn-ghost" data-act="continue">下一墩</button></div>`
@@ -1002,12 +1098,14 @@ function renderTable() {
         </div>
       </div>
       ${circleTableHTML(v)}
-      ${tablePrompt}
-      ${skipTrick}
-      <div class="error-line">${escapeHtml(state.error)}</div>
-      ${bidPanel}
-      ${confirmBar}
-      ${hand}
+      <div class="table-dock">
+        ${tablePrompt}
+        ${skipTrick}
+        <div class="error-line">${escapeHtml(state.error)}</div>
+        ${bidPanel}
+        ${confirmBar}
+        ${hand}
+      </div>
     </div>
     ${v.pendingTigress ? tigressHTML() : ""}
     ${v.phase === "roundResult" || v.phase === "gameOver" ? scoreHTML(v) : ""}
