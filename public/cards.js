@@ -1,0 +1,96 @@
+const ICONS = {
+  yellow: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 8h14l1.5 3H20v9H4v-9H3.5L5 8zm2 3v7h10v-7H7zm2-6h6l1 3H8l1-3z"/></svg>`,
+  green: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4.5 14.5c2.8-1 6.2-4.8 7.2-8.6 2.8 1.6 4.6 4.4 4.6 7.2 0 .4 0 .8-.1 1.1 1.2-1.2 2.8-2.8 3.3-5.1 2.2 3.2.6 8-3.2 10.2-2.2 1.3-5 1.6-7.4.6-1.8-.8-3.8-3.4-4.4-5.4zM8 9.2c.8-1.6 2-3.2 3.4-4.4-.2 2.2-1.6 4.4-3.4 4.4z"/></svg>`,
+  purple: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 6.5 12 4l8 2.5v7.2c0 4.2-3.4 6.8-8 8.8-4.6-2-8-4.6-8-8.8V6.5zm8 1.2-5 1.5v4.5c0 2.5 2 4.3 5 5.7 3-1.4 5-3.2 5-5.7V9.2l-5-1.5z"/></svg>`,
+  black: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3.2c3.5 0 6.3 2.4 6.3 5.6 0 1.8-.9 3.4-2.3 4.4V16h-2.1l-.7-1.7H10.8L10.1 16H8v-2.8C6.6 12.2 5.7 10.6 5.7 8.8 5.7 5.6 8.5 3.2 12 3.2zm-2.5 4.6c-.8 0-1.4.6-1.4 1.4S8.7 10.6 9.5 10.6s1.4-.6 1.4-1.4S10.3 7.8 9.5 7.8zm5 0c-.8 0-1.4.6-1.4 1.4s.6 1.4 1.4 1.4 1.4-.6 1.4-1.4S15.3 7.8 14.5 7.8zM10.2 12.2h3.6v1.1h-3.6v-1.1zM7.6 18.8 9.5 17h5l1.9 1.8H7.6z"/></svg>`,
+  escape: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 4h2v16H5V4zm3 1.5 11 4.2-11 4.2V5.5z"/></svg>`,
+  pirate: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 17.5 12 8l8 9.5H4zM6.5 19h11c.6 1 1 2 1 2H5.5s.4-1 1-2zM11 5.5h2v3h-2v-3zM8.2 6.2l1.4-1.4 2 2.2-1.4 1.3-2-2.1zm7.6 0-2 2.1 1.4 1.3 2-2.2-1.4-1.2z"/></svg>`,
+  mermaid: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3.5 13.2 7h3.8L14.2 9.4 15.5 13 12 10.8 8.5 13l1.3-3.6L7 7h3.8L12 3.5zm-6 11.2c2.2 1 4.4 1.6 6 1.6s3.8-.6 6-1.6c-.4 2.4-2.8 5.3-6 6.8-3.2-1.5-5.6-4.4-6-6.8z"/></svg>`,
+  tigress: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 4c2 3 3 5 3 7 2-1 3.5-1.2 5-.5-1 3.2-3.2 5.2-5.2 6.2 1.2 1.2 2.6 2 4.2 2.6-3 .8-6.2.4-8-.8-1.8 1.2-5 1.6-8 .8 1.6-.6 3-1.4 4.2-2.6C5.2 15.5 3 13.5 2 10.3c1.5-.7 3-.5 5 .5 0-2 1-4 3-6 1 2.2 2 3.4 2 5.2 0-1.8 1-3 2-5.2z"/></svg>`,
+  skullKing: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 8.5 12 3l6 5.5H6zm6 1.2c3.4 0 6 2.2 6 5.4 0 1.6-.6 3-1.6 4.1V21h-2.3l-.6-1.6h-3l-.6 1.6H8.6v-1.8C7.6 18 7 16.7 7 15.1c0-3.2 2.6-5.4 6-5.4zm-2.4 5.2c-.8 0-1.3.6-1.3 1.3S9 16.6 9.6 16.6s1.3-.6 1.3-1.4-.6-1.3-1.3-1.3zm4.8 0c-.8 0-1.3.6-1.3 1.3s.6 1.4 1.3 1.4 1.3-.6 1.3-1.4-.6-1.3-1.3-1.3zM10 18h4v1h-4v-1z"/></svg>`,
+  crown: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 16.5 5.5 7l5 5 1.5-7 1.5 7 5-5 2.5 9.5H3zM4 18h16v2.5H4V18z"/></svg>`,
+};
+
+export const SUIT_INFO = {
+  yellow: { chineseName: "寶藏箱", shortName: "黃" },
+  green: { chineseName: "鸚鵡", shortName: "綠" },
+  purple: { chineseName: "海盜地圖", shortName: "紫" },
+  black: { chineseName: "骷髏旗", shortName: "黑" },
+};
+
+export const SPECIAL_INFO = {
+  escape: { chineseName: "逃脫" },
+  pirate: { chineseName: "海盜" },
+  mermaid: { chineseName: "人魚" },
+  tigress: { chineseName: "母老虎" },
+  skullKing: { chineseName: "骷髏王" },
+};
+
+function kindClass(card) {
+  if (card.special) return `special-${card.special}`;
+  return `suit-${card.suit}`;
+}
+
+export function cardFaceHTML(card, { dimmed = false, tigressAsPirate = null, compact = false } = {}) {
+  const cls = [
+    "sk-card",
+    kindClass(card),
+    dimmed ? "dimmed" : "",
+    compact ? "compact" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  if (card.special) {
+    let title = SPECIAL_INFO[card.special].chineseName;
+    if (card.special === "tigress" && tigressAsPirate != null) {
+      title = tigressAsPirate ? "母老虎·海盜" : "母老虎·逃脫";
+    }
+    const icon = ICONS[card.special] || ICONS.crown;
+    return `<div class="${cls}" data-id="${escapeAttr(card.id)}">
+      <div class="sk-card-inner">
+        <div class="sk-special">
+          <span class="sk-icon">${icon}</span>
+          <span class="sk-special-name">${escapeHtml(title)}</span>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  const info = SUIT_INFO[card.suit];
+  const icon = ICONS[card.suit];
+  return `<div class="${cls}" data-id="${escapeAttr(card.id)}">
+    <div class="sk-card-inner">
+      <div class="sk-corner">
+        <span class="sk-rank">${card.rank}</span>
+        <span class="sk-suit-short">${info.shortName}</span>
+      </div>
+      <span class="sk-icon sk-suit-icon">${icon}</span>
+      <div class="sk-suit-name">${escapeHtml(info.chineseName)}</div>
+    </div>
+  </div>`;
+}
+
+export function cardBackHTML({ compact = false } = {}) {
+  return `<div class="sk-card back ${compact ? "compact" : ""}">
+    <div class="sk-card-inner">
+      <div class="sk-back">
+        <span class="sk-icon">${ICONS.crown}</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+export function iconSVG(name) {
+  return ICONS[name] || ICONS.crown;
+}
+
+export function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+  ));
+}
+
+export function escapeAttr(s) {
+  return escapeHtml(s);
+}

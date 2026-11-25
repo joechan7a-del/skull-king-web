@@ -1,0 +1,364 @@
+import {
+  standardDeck,
+  shuffle,
+  sortHand,
+  legalCards,
+  playedCard,
+  winnerIndex,
+  bonusPoints,
+  scoreRound,
+} from "./rules.js";
+import { bid as aiBid, choosePlay as aiChoosePlay } from "./ai.js";
+
+export const PHASE = {
+  BIDDING: "bidding",
+  PLAYING: "playing",
+  CHOOSING_TIGRESS: "choosingTigress",
+  TRICK_RESULT: "trickResult",
+  ROUND_RESULT: "roundResult",
+  GAME_OVER: "gameOver",
+};
+
+export class Game {
+  constructor(seats) {
+    this.players = seats.map((s) => ({
+      id: s.id,
+      name: s.name,
+      isAI: !!s.isAI,
+      hand: [],
+      bid: null,
+      tricksWon: 0,
+      potentialBonus: 0,
+      bonusDetails: [],
+      score: 0,
+    }));
+    this.phase = PHASE.BIDDING;
+    this.round = 1;
+    this.dealerIndex = 0;
+    this.currentPlayerIndex = 0;
+    this.trick = [];
+    this.lastTrick = [];
+    this.lastWinnerIndex = null;
+    this.lastTrickDetails = [];
+    this.pendingTigress = null;
+    this.scores = [];
+    this.statusMessage = "";
+    this.revision = 0;
+  }
+
+  get cardsDealt() {
+    return this.round;
+  }
+
+  get bidsRevealed() {
+    return this.phase !== PHASE.BIDDING && this.players.every((p) => p.bid != null);
+  }
+
+  playerIndexById(id) {
+    return this.players.findIndex((p) => p.id === id);
+  }
+
+  startRound() {
+    let deck = shuffle(standardDeck());
+    const n = this.cardsDealt;
+    for (const player of this.players) {
+      const dealt = deck.slice(0, n);
+      deck = deck.slice(n);
+      player.hand = sortHand(dealt);
+      player.bid = null;
+      player.tricksWon = 0;
+      player.potentialBonus = 0;
+      player.bonusDetails = [];
+    }
+    this.trick = [];
+    this.lastTrick = [];
+    this.lastWinnerIndex = null;
+    this.lastTrickDetails = [];
+    this.pendingTigress = null;
+    this.phase = PHASE.BIDDING;
+    this.statusMessage = `第 ${this.round} 局，各有 ${n} 張牌。睇完手牌再叫你估會贏幾墩。`;
+    this._applyAIBids();
+    this.revision++;
+  }
+
+  start() {
+    this.round = 1;
+    this.dealerIndex = 0;
+    for (const p of this.players) p.score = 0;
+    this.scores = [];
+    this.startRound();
+  }
+
+  _applyAIBids() {
+    for (const player of this.players) {
+      if (player.isAI) player.bid = aiBid(player.hand, this.cardsDealt);
+    }
+  }
+
+  _maybeRevealBids() {
+    if (this.players.some((p) => p.bid == null)) return false;
+    this.currentPlayerIndex = (this.dealerIndex + 1) % this.players.length;
+    this.phase = PHASE.PLAYING;
+    const leader = this.players[this.currentPlayerIndex];
+    this.statusMessage = leader.isAI
+      ? `由${leader.name}先出第一墩。`
+      : this._isSelfLeadMessage(leader);
+    this.revision++;
+    return true;
+  }
+
+  _isSelfLeadMessage(leader) {
+    return `由${leader.name}先出第一墩。`;
+  }
+
+  submitBid(playerId, value) {
+    if (this.phase !== PHASE.BIDDING) return { error: "而家唔係叫牌時間。" };
+    const index = this.playerIndexById(playerId);
+    if (index < 0) return { error: "找不到呢位玩家。" };
+    const player = this.players[index];
+    if (player.isAI) return { error: "電腦玩家會自己叫牌。" };
+    if (player.bid != null) return { error: "你已經叫咗牌。" };
+    const bid = Math.min(this.cardsDealt, Math.max(0, Number(value)));
+    if (!Number.isInteger(bid) || bid !== Number(value)) {
+      return { error: `叫牌要係 0 到 ${this.cardsDealt} 嘅整數。` };
+    }
+    player.bid = bid;
+    this.revision++;
+    const waiting = this.players.filter((p) => p.bid == null).map((p) => p.name);
+    if (waiting.length) {
+      this.statusMessage = `已叫牌。仲等緊 ${waiting.join("、")}。`;
+    }
+    this._maybeRevealBids();
+    return { ok: true };
+  }
+
+  playCard(playerId, cardId, tigressAsPirate) {
+    if (this.phase === PHASE.CHOOSING_TIGRESS) {
+      return { error: "請先揀母老虎當海盜定逃脫。" };
+    }
+    if (this.phase !== PHASE.PLAYING) return { error: "而家唔係出牌時間。" };
+    const index = this.playerIndexById(playerId);
+    if (index < 0) return { error: "找不到呢位玩家。" };
+    if (index !== this.currentPlayerIndex) return { error: "仲未到你出牌。" };
+    const player = this.players[index];
+    const card = player.hand.find((c) => c.id === cardId);
+    if (!card) return { error: "呢張牌唔喺你手上。" };
+    const legal = legalCards(player.hand, this.trick);
+    if (!legal.some((c) => c.id === card.id)) return { error: "呢張牌唔可以出：有花色就要跟花。" };
+    if (card.special === "tigress") {
+      if (tigressAsPirate !== true && tigressAsPirate !== false) {
+        this.pendingTigress = { playerId, cardId };
+        this.phase = PHASE.CHOOSING_TIGRESS;
+        this.statusMessage = `${player.name}要宣布母老虎當海盜定逃脫。`;
+        this.revision++;
+        return { ok: true, needTigress: true };
+      }
+    } else if (tigressAsPirate != null) {
+      return { error: "只有母老虎先要宣布當海盜定逃脫。" };
+    }
+    return this._commitPlay(index, card, card.special === "tigress" ? !!tigressAsPirate : null);
+  }
+
+  resolveTigress(playerId, asPirate) {
+    if (this.phase !== PHASE.CHOOSING_TIGRESS) return { error: "而家唔使揀母老虎。" };
+    if (!this.pendingTigress || this.pendingTigress.playerId !== playerId) {
+      return { error: "而家唔係你揀母老虎。" };
+    }
+    const index = this.playerIndexById(playerId);
+    const card = this.players[index].hand.find((c) => c.id === this.pendingTigress.cardId);
+    if (!card) return { error: "找不到母老虎呢張牌。" };
+    this.pendingTigress = null;
+    return this._commitPlay(index, card, !!asPirate);
+  }
+
+  cancelTigress(playerId) {
+    if (this.phase !== PHASE.CHOOSING_TIGRESS) return { error: "而家唔使取消。" };
+    if (!this.pendingTigress || this.pendingTigress.playerId !== playerId) {
+      return { error: "而家唔係你揀母老虎。" };
+    }
+    this.pendingTigress = null;
+    this.phase = PHASE.PLAYING;
+    this.statusMessage = "輪到你出牌。";
+    this.revision++;
+    return { ok: true };
+  }
+
+  _commitPlay(index, card, tigressAsPirate) {
+    const player = this.players[index];
+    player.hand = player.hand.filter((c) => c.id !== card.id);
+    this.trick.push(playedCard(index, card, tigressAsPirate));
+    this.phase = PHASE.PLAYING;
+    if (this.trick.length === this.players.length) {
+      this._resolveTrick();
+    } else {
+      this.currentPlayerIndex = (index + 1) % this.players.length;
+      this.statusMessage = `輪到${this.players[this.currentPlayerIndex].name}出牌。`;
+      this.revision++;
+    }
+    return { ok: true };
+  }
+
+  _resolveTrick() {
+    const winner = winnerIndex(this.trick);
+    const bonus = bonusPoints(this.trick, winner);
+    this.players[winner].tricksWon += 1;
+    this.players[winner].potentialBonus += bonus.points;
+    this.players[winner].bonusDetails.push(...bonus.details);
+    this.lastWinnerIndex = winner;
+    this.lastTrick = this.trick;
+    this.lastTrickDetails = bonus.details;
+    this.trick = [];
+    this.phase = PHASE.TRICK_RESULT;
+    const extra = bonus.details.length ? "（" + bonus.details.join("，") + "）" : "";
+    this.statusMessage = `${this.players[winner].name}贏咗呢墩。` + extra;
+    this.revision++;
+  }
+
+  advanceTrickResult() {
+    if (this.phase !== PHASE.TRICK_RESULT) return { error: "而家唔係墩結果。" };
+    const winner = this.lastWinnerIndex ?? this.currentPlayerIndex;
+    if (this.players.every((p) => p.hand.length === 0)) {
+      this._finalizeRound();
+    } else {
+      this.currentPlayerIndex = winner;
+      this.phase = PHASE.PLAYING;
+      this.statusMessage = `${this.players[winner].name}出下一墩。`;
+      this.revision++;
+    }
+    return { ok: true };
+  }
+
+  _finalizeRound() {
+    const rows = [];
+    for (const player of this.players) {
+      const result = scoreRound(
+        player.bid ?? 0,
+        player.tricksWon,
+        this.cardsDealt,
+        player.potentialBonus,
+      );
+      player.score += result.total;
+      rows.push({
+        playerId: player.id,
+        playerName: player.name,
+        bid: player.bid ?? 0,
+        taken: player.tricksWon,
+        bidPoints: result.bidPoints,
+        bonus: result.bonus,
+        roundTotal: result.total,
+        runningTotal: player.score,
+      });
+    }
+    this.scores.push({ round: this.round, cardsDealt: this.cardsDealt, rows });
+    this.phase = PHASE.ROUND_RESULT;
+    this.statusMessage = `第 ${this.round} 局結束。`;
+    this.revision++;
+  }
+
+  continueAfterRound() {
+    if (this.phase !== PHASE.ROUND_RESULT) return { error: "而家唔係局結算。" };
+    if (this.round >= 10) {
+      this.phase = PHASE.GAME_OVER;
+      const top = Math.max(...this.players.map((p) => p.score));
+      const tied = this.players.filter((p) => p.score === top);
+      if (tied.length > 1) {
+        this.statusMessage = `打和，最高分係 ${top} 分（${tied.map((p) => p.name).join("、")}）。`;
+      } else {
+        this.statusMessage = `${tied[0].name}勝出，共 ${top} 分。`;
+      }
+      this.revision++;
+    } else {
+      this.dealerIndex = (this.dealerIndex + 1) % this.players.length;
+      this.round += 1;
+      this.startRound();
+    }
+    return { ok: true };
+  }
+
+  playAgain() {
+    if (this.phase !== PHASE.GAME_OVER) return { error: "遊戲仲未完。" };
+    this.start();
+    return { ok: true };
+  }
+
+  /** If the current seat is AI and it's time to act, perform that action. */
+  stepAI() {
+    if (this.phase === PHASE.BIDDING) return { waited: true };
+    if (this.phase === PHASE.TRICK_RESULT || this.phase === PHASE.ROUND_RESULT || this.phase === PHASE.GAME_OVER) {
+      return { waited: true };
+    }
+    if (this.phase === PHASE.CHOOSING_TIGRESS) return { waited: true };
+    if (this.phase !== PHASE.PLAYING) return { waited: true };
+    const player = this.players[this.currentPlayerIndex];
+    if (!player.isAI) return { waited: true };
+    const legal = legalCards(player.hand, this.trick);
+    const [card, asPirate] = aiChoosePlay({
+      hand: player.hand,
+      legal,
+      trick: this.trick,
+      bid: player.bid ?? 0,
+      taken: player.tricksWon,
+      myIndex: this.currentPlayerIndex,
+      playerCount: this.players.length,
+    });
+    return this._commitPlay(this.currentPlayerIndex, card, asPirate);
+  }
+
+  viewFor(playerId) {
+    const myIndex = this.playerIndexById(playerId);
+    const me = myIndex >= 0 ? this.players[myIndex] : null;
+    const revealed = this.bidsRevealed;
+    const showTrick = this.phase === PHASE.TRICK_RESULT ? this.lastTrick : this.trick;
+    const legal = me && this.phase === PHASE.PLAYING && this.currentPlayerIndex === myIndex
+      ? legalCards(me.hand, this.trick).map((c) => c.id)
+      : [];
+
+    return {
+      phase: this.phase,
+      round: this.round,
+      cardsDealt: this.cardsDealt,
+      dealerIndex: this.dealerIndex,
+      currentPlayerIndex: this.currentPlayerIndex,
+      statusMessage: this.statusMessage,
+      revision: this.revision,
+      bidsRevealed: revealed,
+      lastWinnerIndex: this.phase === PHASE.TRICK_RESULT ? this.lastWinnerIndex : null,
+      lastTrickDetails: this.phase === PHASE.TRICK_RESULT ? this.lastTrickDetails : [],
+      pendingTigress: !!(
+        this.phase === PHASE.CHOOSING_TIGRESS &&
+        this.pendingTigress &&
+        this.pendingTigress.playerId === playerId
+      ),
+      trick: showTrick.map((p) => ({
+        playerIndex: p.playerIndex,
+        playerName: this.players[p.playerIndex]?.name,
+        card: p.card,
+        tigressAsPirate: p.tigressAsPirate,
+      })),
+      myHand: me ? me.hand : [],
+      legalCardIds: legal,
+      isMyTurn: this.phase === PHASE.PLAYING && myIndex === this.currentPlayerIndex,
+      scores: this.scores,
+      players: this.players.map((p, i) => ({
+        id: p.id,
+        name: p.name,
+        isAI: p.isAI,
+        score: p.score,
+        handCount: p.hand.length,
+        tricksWon: revealed || this.phase === PHASE.BIDDING ? p.tricksWon : 0,
+        bid: revealed || p.id === playerId ? p.bid : null,
+        hasBid: p.bid != null,
+        isTurn:
+          (this.phase === PHASE.PLAYING || this.phase === PHASE.CHOOSING_TIGRESS) &&
+          i === this.currentPlayerIndex,
+        potentialBonus: p.id === playerId ? p.potentialBonus : null,
+        bonusDetails: p.id === playerId ? p.bonusDetails : [],
+      })),
+    };
+  }
+}
+
+export function publicHandsEmpty(game) {
+  // helper used in tests — never leak other hands
+  return game.players.every((p) => Array.isArray(p.hand));
+}

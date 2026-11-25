@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: skull-king-web
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm install
+    startCommand: npm start
