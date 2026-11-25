@@ -47,6 +47,7 @@ export class Game {
     this.previousTrick = null;
     this.pendingTigress = null;
     this.scores = [];
+    this.tricksPlayed = 0;
     this.statusMessage = "";
     this.revision = 0;
   }
@@ -83,6 +84,7 @@ export class Game {
     this.lastTrickDetails = [];
     this.previousTrick = null;
     this.pendingTigress = null;
+    this.tricksPlayed = 0;
     this.phase = PHASE.BIDDING;
     this.statusMessage = `第 ${this.round} 局，各有 ${n} 張牌。睇完手牌再叫你估會贏幾墩。`;
     this._applyAIBids();
@@ -233,6 +235,7 @@ export class Game {
       this.statusMessage = `${whale}${winner.name}贏咗呢墩。` + extra;
     }
     this.trick = [];
+    this.tricksPlayed += 1;
     this.phase = PHASE.TRICK_RESULT;
     this.revision++;
   }
@@ -380,10 +383,18 @@ export class Game {
     const trickForSuit = this.phase === PHASE.TRICK_RESULT ? this.lastTrick : this.trick;
     const suit = trickForSuit && trickForSuit.length ? ledSuit(trickForSuit) : null;
 
+    const trickNumber = this.phase === PHASE.BIDDING
+      ? 0
+      : (this.phase === PHASE.TRICK_RESULT || this.phase === PHASE.ROUND_RESULT || this.phase === PHASE.GAME_OVER)
+        ? this.tricksPlayed
+        : this.tricksPlayed + 1;
+
     return {
       phase: this.phase,
       round: this.round,
       cardsDealt: this.cardsDealt,
+      trickNumber,
+      tricksTotal: this.cardsDealt,
       dealerIndex: this.dealerIndex,
       currentPlayerIndex: this.currentPlayerIndex,
       statusMessage: this.statusMessage,

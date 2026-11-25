@@ -4,6 +4,7 @@ const TOKEN_KEY = "sk_token";
 const NAME_KEY = "sk_name";
 const ROOM_KEY = "sk_room";
 const MUTE_KEY = "sk_mute";
+const A2HS_KEY = "sk_a2hs";
 
 const state = {
   screen: "home", // home | lobby | play | rules
@@ -26,6 +27,12 @@ const state = {
   scorePeek: false,
   prevTrickPeek: false,
   muted: localStorage.getItem(MUTE_KEY) === "1",
+  leaveConfirm: false,
+  showRoomCode: false,
+  a2hsDismissed: localStorage.getItem(A2HS_KEY) === "1",
+  announcedTurnKey: "",
+  longPressFired: false,
+  scrolledTurnKey: "",
   lastDealtKey: "",
   dealingKey: "",
   dealStartedAt: 0,
@@ -152,6 +159,45 @@ function playSound(key) {
 
 function playCardFlip() { playSound("flip"); }
 function playUiClick() { playSound("click"); }
+
+function playTurnChime() {
+  try {
+    if (state.muted) return;
+    unlockAudio();
+    const ctx = getAudioCtx();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const notes = [523.25, 783.99];
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const start = now + i * 0.09;
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.07, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.22);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(start);
+      osc.stop(start + 0.24);
+    });
+  } catch {
+    /* never block the game */
+  }
+}
+
+function maybeAnnounceTurn(v) {
+  if (!v || !v.inGame) return;
+  const me = (v.players || []).find((p) => p.id === v.yourId);
+  let key = "";
+  if (v.phase === "bidding" && me && !me.hasBid) key = "bid:" + v.round;
+  else if (v.phase === "playing" && v.isMyTurn) key = "play:" + v.round + ":" + (v.trickNumber || 0);
+  if (!key || key === state.announcedTurnKey) return;
+  state.announcedTurnKey = key;
+  playTurnChime();
+  haptic(22);
+}
 
 function haptic(ms = 12) {
   try { navigator.vibrate?.(ms); } catch { /* not supported */ }
@@ -297,6 +343,8 @@ function goHome({ clearToken = false } = {}) {
   state.inspect = null;
   state.scorePeek = false;
   state.prevTrickPeek = false;
+  state.leaveConfirm = false;
+  state.showRoomCode = false;
   resetTrickAnim();
   releaseWakeLock();
   if (clearToken) {
@@ -425,6 +473,7 @@ function onMessage(msg) {
       else if (state.selectedCardId && !(msg.legalCardIds || []).includes(state.selectedCardId)) {
         state.selectedCardId = null;
       }
+      maybeAnnounceTurn(msg);
     }
     render();
   }
@@ -464,6 +513,120 @@ async function copyText(text) {
       return false;
     }
   }
+}
+
+async function pasteCode() {
+  try {
+    const raw = (await navigator.clipboard.readText() || "").trim().toUpperCase();
+    const match = raw.match(/[A-Z0-9]{4,8}/);
+    const code = match ? match[0].slice(0, 6) : "";
+    if (!code) {
+      showToast("剪貼板冇房號");
+      return;
+    }
+    state.joinCode = code;
+    state.error = "";
+    showToast("已貼上 " + code);
+    render();
+  } catch {
+    showToast("請手動輸入房號，或先複製再試");
+  }
+}
+
+function shouldShowA2hs() {
+  if (state.a2hsDismissed) return false;
+  const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone;
+  if (standalone) return false;
+  const narrow = window.matchMedia("(max-width: 820px)").matches;
+  const ua = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  return narrow || ua;
+}
+
+function a2hsHTML() {
+  if (!shouldShowA2hs()) return "";
+  const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const how = ios
+    ? "喺 Safari 撳底部分享掣，再揀「加到主畫面」，下次一撳就開。"
+    : "用瀏覽器選單揀「加到主畫面」或「安裝應用程式」，下次一撳就開。";
+  return "<div class=\"a2hs-tip\" role=\"status\"><p>想更似應用程式？" + how + "</p><button type=\"button\" class=\"btn-text\" data-act=\"dismiss-a2hs\">知喇</button></div>";
+}
+
+function dismissA2hs() {
+  state.a2hsDismissed = true;
+  try { localStorage.setItem(A2HS_KEY, "1"); } catch { /* ignore */ }
+  render();
+}
+
+function leaveConfirmHTML() {
+  if (!state.leaveConfirm) return "";
+  return "<div class=\"overlay center\" data-act=\"cancel-leave\"><div class=\"sheet\" data-stop=\"1\">" +
+    "<h2>確定離開？</h2>" +
+    "<p>牌局仲進行緊。用同一部電話重新打開呢個連結就可以返嚟繼續。</p>" +
+    "<div class=\"confirm-actions\"><button type=\"button\" class=\"btn btn-sheet\" data-act=\"cancel-leave\">繼續玩</button>" +
+    "<button type=\"button\" class=\"btn btn-ink\" data-act=\"confirm-leave\">離開</button></div></div></div>";
+}
+
+function showCodeHTML(code) {
+  if (!state.showRoomCode || !code) return "";
+  return "<div class=\"overlay center show-code-overlay\" data-act=\"close-show-code\">" +
+    "<div class=\"sheet show-code-sheet\" data-stop=\"1\">" +
+    "<p class=\"label\">把房號出示俾朋友</p>" +
+    "<div class=\"giant-code\">" + escapeHtml(code) + "</div>" +
+    "<p class=\"show-code-url\">" + escapeHtml(shareUrl(code)) + "</p>" +
+    "<p class=\"sub\">朋友輸入呢個號，或者打開上面條連結，就可以加入。</p>" +
+    "<button type=\"button\" class=\"btn btn-gold\" data-act=\"copy-code\">複製房號</button>" +
+    "<button type=\"button\" class=\"btn btn-sheet\" data-act=\"close-show-code\">關閉</button>" +
+    "</div></div>";
+}
+
+function bindCardLongPress() {
+  app.querySelectorAll(".sk-wrap .sk-play, .seat-card[data-act='inspect']").forEach((btn) => {
+    let timer = 0;
+    const clear = () => { if (timer) { clearTimeout(timer); timer = 0; } };
+    btn.addEventListener("pointerdown", (e) => {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      state.longPressFired = false;
+      const id = btn.dataset.id;
+      if (!id) return;
+      const why = btn.dataset.why || "";
+      const x0 = e.clientX, y0 = e.clientY;
+      const move = (ev) => {
+        if (Math.hypot(ev.clientX - x0, ev.clientY - y0) > 8) clear();
+      };
+      const stop = () => {
+        clear();
+        btn.removeEventListener("pointermove", move);
+        btn.removeEventListener("pointerup", stop);
+        btn.removeEventListener("pointercancel", stop);
+      };
+      btn.addEventListener("pointermove", move);
+      btn.addEventListener("pointerup", stop);
+      btn.addEventListener("pointercancel", stop);
+      timer = window.setTimeout(() => {
+        timer = 0;
+        state.longPressFired = true;
+        haptic(10);
+        openInspect(id, why);
+      }, 420);
+    });
+    btn.addEventListener("click", (e) => {
+      if (state.longPressFired) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        state.longPressFired = false;
+      }
+    }, true);
+  });
+}
+
+function scrollPlayableIntoView() {
+  const v = state.view;
+  if (state.screen !== "play" || !v || !v.isMyTurn || v.phase !== "playing") return;
+  const key = v.round + ":" + (v.trickNumber || 0) + ":" + (v.legalCardIds || []).join(",");
+  if (state.scrolledTurnKey === key) return;
+  state.scrolledTurnKey = key;
+  const el = app.querySelector(".sk-wrap.selected") || app.querySelector(".sk-wrap.playable");
+  if (el) el.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
 }
 
 function createRoom() {
@@ -546,7 +709,7 @@ app.addEventListener("click", (e) => {
     return;
   }
   const cardActs = act === "inspect" || act === "select-card" || act === "play-card";
-  const silentActs = t.classList.contains("overlay") && (act === "close-inspect" || act === "close-score-peek" || act === "close-prev-trick");
+  const silentActs = t.classList.contains("overlay") && (act === "close-inspect" || act === "close-score-peek" || act === "close-prev-trick" || act === "close-show-code" || act === "cancel-leave");
   if (!cardActs && !silentActs) playUiClick();
   if (act === "create") createRoom();
   else if (act === "join") joinRoom();
@@ -575,13 +738,27 @@ app.addEventListener("click", (e) => {
   else if (act === "ready") send({ type: "ready", ready: t.dataset.on !== "1" });
   else if (act === "start") send({ type: "startGame" });
   else if (act === "leave") {
-    if (view?.inGame && !confirm("暫時離開？用同一部電話重新打開連結就可以返來繼續。")) return;
-    send({ type: "leave" });
-    // If mid-game, keep token so they can rejoin.
     if (view?.inGame) {
-      goHome({ clearToken: false });
+      state.leaveConfirm = true;
+      render();
+      return;
     }
+    send({ type: "leave" });
   }
+  else if (act === "confirm-leave") {
+    state.leaveConfirm = false;
+    send({ type: "leave" });
+    if (view?.inGame) goHome({ clearToken: false });
+  }
+  else if (act === "cancel-leave") {
+    state.leaveConfirm = false;
+    render();
+    return;
+  }
+  else if (act === "paste-code") { pasteCode(); return; }
+  else if (act === "dismiss-a2hs") { dismissA2hs(); return; }
+  else if (act === "show-code") { state.showRoomCode = true; render(); return; }
+  else if (act === "close-show-code") { state.showRoomCode = false; render(); return; }
   else if (act === "bid-pick") { state.bidValue = Number(t.dataset.n); render(); }
   else if (act === "bid-submit") {
     if (state.bidValue == null) { setError("請先揀你叫幾多墩。"); return; }
@@ -806,7 +983,8 @@ function renderHome() {
         <button class="btn btn-gold" data-act="create">開房</button>
         <div class="or-row">或者加入</div>
         <div class="join-row">
-          <input id="code-input" maxlength="6" placeholder="房號" value="${escapeHtml(prefill)}" autocapitalize="characters" autocomplete="off" />
+          <input id="code-input" maxlength="6" placeholder="房號" value="${escapeHtml(prefill)}" autocapitalize="characters" autocomplete="off" inputmode="text" enterkeyhint="go" />
+          <button type="button" class="btn btn-ghost" data-act="paste-code">貼上</button>
           <button class="btn btn-ghost" data-act="join">加入</button>
         </div>
         <p class="home-hint">開房之後把房號或連結傳俾朋友，佢哋輸入同一個號就可以一齊玩。第一次玩可以先睇遊戲規則。</p>
@@ -816,6 +994,7 @@ function renderHome() {
         <button class="btn-text" data-act="rules">遊戲規則</button>
         <div class="footer-note">基本規則 · 八爪魚同白鯨 · 10 局 · 暫時唔包括贓物牌</div>
         ${location.hostname === "localhost" || location.hostname === "127.0.0.1" ? lan : ""}
+        ${a2hsHTML()}
       </div>
     </div>
     ${toastHTML()}
@@ -866,10 +1045,11 @@ function renderLobby() {
         <div class="topbar-right">${muteToggleHTML()}<button class="btn-text" data-act="rules">規則</button></div>
       </div>
       <div class="code-hero">
-        <div class="label">房號</div>
-        <div class="code">${escapeHtml(v.code)}</div>
+        <div class="label">房號 · 撳下去出示俾朋友</div>
+        <button type="button" class="code" data-act="show-code" aria-label="出示房號">${escapeHtml(v.code)}</button>
         <div class="code-actions">
-          <button class="btn btn-gold" data-act="share-room">分享俾朋友</button>
+          <button class="btn btn-gold" data-act="show-code">出示房號</button>
+          <button class="btn btn-ghost" data-act="share-room">分享俾朋友</button>
         </div>
         <div class="code-actions secondary">
           <button class="btn btn-ghost" data-act="copy-code">複製房號</button>
@@ -923,6 +1103,7 @@ function renderLobby() {
         <button class="btn btn-gold" data-act="start" ${canStart ? "" : "disabled"}>開始遊戲</button>` : ""}
       </div>
     </div>
+    ${showCodeHTML(v.code)}
     ${toastHTML()}
   `;
 }
@@ -1354,6 +1535,11 @@ function renderTable() {
     bidPanel = `<div class="bid-panel">
       <h3>${alreadyBid ? "已叫牌，等其他人" : "你估會贏幾墩？"}</h3>
       <p class="bid-progress">已叫 ${bidCount}／${bidTotal} 人</p>
+      ${(() => {
+        const waitingBid = (v.players || []).filter((p) => !p.hasBid);
+        if (!waitingBid.length) return '<p class="bid-wait done">所有人都叫咗。</p>';
+        return '<div class="bid-wait" aria-live="polite"><span>仲等</span> ' + waitingBid.map((p) => '<span class="bid-wait-name">' + escapeHtml(p.name) + (p.id === v.yourId ? '（你）' : '') + '</span>').join('') + '</div>';
+      })()}
       <p>${alreadyBid ? `你叫咗 ${myBid} 墩。等其他人一齊叫完先揭曉。` : `睇完手牌先叫，可以叫 0 到 ${n}。其他人叫咩要等齊先睇到。`}</p>
       ${alreadyBid ? "" : `<p class="bid-hint">${escapeHtml(bidHint(n, state.bidValue))}</p>
         <div class="bid-grid">${btns}</div>
@@ -1408,6 +1594,9 @@ function renderTable() {
           ? `<span class="card-tag special">特殊</span>`
           : (c.suit === v.ledSuit ? `<span class="card-tag follow">跟</span>` : "");
       }
+      if (handCards.length === 1 && (v.phase === "playing" || v.phase === "choosingTigress" || v.phase === "trickResult")) {
+        tag += `<span class="card-tag last">最後</span>`;
+      }
       if (isLegal) {
         return `<div class="sk-wrap${selected ? " selected" : ""} playable${dealCls}" ${style}>
           <button class="sk-play" data-act="select-card" data-id="${escapeHtml(c.id)}">${inner.replace("sk-card ", `sk-card legal ${selected ? "picked " : ""}`)}</button>
@@ -1438,7 +1627,12 @@ function renderTable() {
         </div>
         <div class="center">
           <div class="round">第 ${v.round} 局／10</div>
-          <div class="sub">各 ${v.cardsDealt} 張</div>
+          <div class="sub">${(() => {
+            const total = v.tricksTotal || v.cardsDealt;
+            if (v.phase === 'bidding') return '各 ' + v.cardsDealt + ' 張 · 叫牌中';
+            if (v.phase === 'roundResult' || v.phase === 'gameOver') return '各 ' + v.cardsDealt + ' 張 · 局滿';
+            return '第 ' + (v.trickNumber || 1) + '／' + total + ' 墩';
+          })()}</div>
         </div>
         <div class="header-actions">
           <button class="btn-text" data-act="score-peek">分數</button>
@@ -1463,6 +1657,7 @@ function renderTable() {
     ${scorePeekHTML(v)}
     ${prevTrickSheetHTML(v)}
     ${inspectHTML()}
+    ${leaveConfirmHTML()}${showCodeHTML(v.code)}
     ${toastHTML()}
   `;
 }
@@ -1521,7 +1716,11 @@ function scoreHTML(v) {
   let mineSummary = "";
   if (meRow) {
     const made = meRow.bid === meRow.taken;
-    mineSummary = `<p class="score-summary">你叫 ${meRow.bid} 贏 ${meRow.taken}，${made ? "估中" : "估錯"} ${signed(meRow.bidPoints)} 分${meRow.bonus ? `，獎勵 +${meRow.bonus}` : ""}，本局 ${signed(meRow.roundTotal)}，而家總分 ${meRow.runningTotal}。</p>`;
+    mineSummary = `<div class="score-hero ${made ? "made" : "missed"}">
+      <div class="hero-kicker">${made ? "估中！" : "估錯"}</div>
+      <p>你叫 ${meRow.bid} 贏 ${meRow.taken}，叫牌分 ${signed(meRow.bidPoints)}${meRow.bonus ? `，獎勵 +${meRow.bonus}` : ""}，本局 ${signed(meRow.roundTotal)}</p>
+      <div class="hero-total">總分 <strong>${meRow.runningTotal}</strong></div>
+    </div>`;
   }
   const hostBtns = v.youAreHost
     ? `<div class="actions">
@@ -1605,6 +1804,8 @@ function render() {
   else html = renderHome();
   app.innerHTML = html;
   if (screen === "play") applyFlyAnim(state.view);
+  bindCardLongPress();
+  scrollPlayableIntoView();
   syncWakeLock();
 }
 

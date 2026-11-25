@@ -495,3 +495,41 @@ test("previousTrick keeps 14-point bonus details after a white whale number win"
   assert.ok(view.previousTrick.details.some((d) => d.includes("寶藏箱 14")));
   assert.ok(!view.previousTrick.details.some((d) => d.includes("捕獲")));
 });
+
+
+test("trickNumber counts completed and current tricks including voided ones", () => {
+  const g = new Game(seats(2, 0));
+  g.start();
+  g.round = 2;
+  g.players[0].hand = [makeSuit("yellow", 3), makeSpecial("kraken")];
+  g.players[1].hand = [makeSuit("yellow", 12), makeSuit("green", 5)];
+  g.players[0].bid = 1;
+  g.players[1].bid = 1;
+  g.phase = PHASE.PLAYING;
+  g.currentPlayerIndex = 1;
+  let view = g.viewFor("h0");
+  assert.equal(view.trickNumber, 1);
+  assert.equal(view.tricksTotal, 2);
+  assert.equal(g.tricksPlayed, 0);
+  g.playCard("h1", "yellow-12");
+  g.playCard("h0", "yellow-3");
+  assert.equal(g.phase, PHASE.TRICK_RESULT);
+  view = g.viewFor("h0");
+  assert.equal(view.trickNumber, 1);
+  assert.equal(g.tricksPlayed, 1);
+  g.advanceTrickResult();
+  view = g.viewFor("h0");
+  assert.equal(g.phase, PHASE.PLAYING);
+  assert.equal(view.trickNumber, 2);
+  g.playCard("h1", "green-5");
+  g.playCard("h0", "kraken");
+  view = g.viewFor("h0");
+  assert.equal(g.phase, PHASE.TRICK_RESULT);
+  assert.equal(view.lastTrickDestroyed, true);
+  assert.equal(view.trickNumber, 2);
+  assert.equal(view.tricksTotal, 2);
+  g.advanceTrickResult();
+  view = g.viewFor("h0");
+  assert.equal(view.phase, PHASE.ROUND_RESULT);
+  assert.equal(view.trickNumber, 2);
+});
