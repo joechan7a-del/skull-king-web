@@ -401,3 +401,59 @@ export function scoreRound(bid, taken, cardsDealt, bonus) {
   const awardedBonus = made ? bonus : 0;
   return { bidPoints, bonus: awardedBonus, total: bidPoints + awardedBonus };
 }
+
+
+export function playedDisplayName(played) {
+  if (!played?.card) return "";
+  if (played.card.special === "tigress") {
+    return played.tigressAsPirate ? "母老虎（當海盜）" : "母老虎（當逃脫）";
+  }
+  return displayName(played.card);
+}
+
+/**
+ * A short Cantonese reason for how this completed trick is resolved.
+ * Uses the official resolveTrick / standard ranking; does not change the rules.
+ */
+export function explainTrick(trick) {
+  if (!Array.isArray(trick) || !trick.length) return "";
+  const outcome = resolveTrick(trick);
+  const winPlay = outcome.winnerPlayerIndex == null
+    ? null
+    : trick.find((p) => p.playerIndex === outcome.winnerPlayerIndex);
+  const winName = winPlay ? playedDisplayName(winPlay) : "";
+
+  if (outcome.effect === "kraken") {
+    return "八爪魚令呢墩作廢，冇人贏墩。";
+  }
+  if (outcome.effect === "whiteWhale") {
+    if (outcome.destroyed) return "白鯨出咗，但呢墩冇數字牌，所以作廢。";
+    const same = trick.filter(isSuitCard).filter((p) => p.card.rank === winPlay.card.rank);
+    if (same.length > 1) return `白鯨令特殊牌唔計，最高點數相同就由先出嘅${winName}贏。`;
+    return `白鯨令特殊牌唔計，由點數最高嘅${winName}贏。`;
+  }
+
+  const mermaids = trick.filter(isMermaid);
+  const kings = trick.filter(isSkullKing);
+  const pirates = trick.filter(isEffectivePirate);
+
+  if (mermaids.length && kings.length) return `人魚捕獲骷髏王，所以${winName}贏。`;
+  if (kings.length) return `骷髏王最大，所以${winName}贏。`;
+  if (pirates.length && mermaids.length) return `海盜大過人魚，所以${winName}贏。`;
+  if (pirates.length) return `海盜大過花色牌，所以${winName}贏。`;
+  if (mermaids.length) return `人魚大過花色牌，所以${winName}贏。`;
+
+  if (winPlay && winPlay.card.suit === "black") {
+    const suit = ledSuit(trick);
+    if (suit === "black") return `跟骷髏旗當中最大嘅${winName}贏。`;
+    return `骷髏旗係王牌，最大嘅${winName}贏。`;
+  }
+
+  const suit = ledSuit(trick);
+  if (suit && winPlay?.card?.suit === suit) {
+    return `跟${SUIT_INFO[suit].shortName}花當中最大嘅${winName}贏。`;
+  }
+  if (trick.every(isEffectiveEscape)) return `全部都係逃脫，由先出嘅${winName}贏。`;
+  if (winName) return `由${winName}贏。`;
+  return "";
+}

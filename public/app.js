@@ -1,4 +1,5 @@
 import { cardFaceHTML, cardBackHTML, iconSVG, escapeHtml, CARD_HELP, SPECIAL_INFO, SUIT_INFO, cardHelpText, suitLabel } from "./cards.js";
+import { qrSvg } from "./qr.js";
 
 const TOKEN_KEY = "sk_token";
 const NAME_KEY = "sk_name";
@@ -72,6 +73,10 @@ const state = {
   confetti: null,
   confettiTimer: 0,
   lobbyNameDraft: null,
+  editingBid: false,
+  rotateDismissed: false,
+  winBuzzKey: "",
+  trickLogPeek: false,
 };
 
 const app = document.getElementById("app");
@@ -704,6 +709,7 @@ function dismissSheet(act) {
   else if (act === "close-prev-trick") state.prevTrickPeek = false;
   else if (act === "close-show-code") state.showRoomCode = false;
   else if (act === "cancel-leave") state.leaveConfirm = false;
+  else if (act === "close-trick-log") state.trickLogPeek = false;
   else return;
   render();
 }
@@ -797,25 +803,18 @@ function playWaitHTML(v) {
 
 function trickCaptionHTML(v) {
   if (!v || v.phase !== "trickResult") return "";
-  const key = `${v.round}:${v.trickNumber}:${v.lastTrickDestroyed ? "void" : v.lastWinnerIndex}`;
-  if (state.trickCaptionKey !== key) {
-    state.trickCaptionKey = key;
-    state.trickCaptionStartedAt = performance.now();
-    clearTimeout(state.trickCaptionTimer);
-    state.trickCaptionTimer = setTimeout(() => {
-      state.trickCaptionTimer = 0;
-      if (state.view?.phase === "trickResult") render();
-    }, 1050);
-  }
-  const elapsed = performance.now() - state.trickCaptionStartedAt;
-  if (elapsed > 1050) return "";
+  maybeWinBuzz(v);
+  const meIndex = (v.players || []).findIndex((p) => p.id === v.yourId);
+  const mine = !v.lastTrickDestroyed && meIndex >= 0 && meIndex === v.lastWinnerIndex;
   let text;
   if (v.lastTrickDestroyed) text = "呢墩作廢";
+  else if (mine) text = "你贏咗呢墩";
   else {
     const winner = (v.players || [])[v.lastWinnerIndex];
-    text = `${winner?.name || "有人"} 贏咗呢墩`;
+    text = `${winner?.name || "有人"}贏咗呢墩`;
   }
-  return `<div class="trick-caption${v.lastTrickDestroyed ? " void" : ""}" role="status">${escapeHtml(text)}</div>`;
+  const why = v.lastTrickExplanation ? `<span class="trick-why">${escapeHtml(v.lastTrickExplanation)}</span>` : "";
+  return `<div class="trick-caption sticky${v.lastTrickDestroyed ? " void" : ""}${mine ? " mine" : ""}" role="status"><span class="trick-who">${escapeHtml(text)}</span>${why}</div>`;
 }
 
 function lastTrickCueHTML(v) {
@@ -901,6 +900,104 @@ function pathCode() {
 function shareUrl(code) {
   return `${location.origin}/r/${code}`;
 }
+
+const AVATAR_PALETTE = [
+  ["#1e6f8b", "#f3fbff"],
+  ["#8b3d1f", "#fff4ee"],
+  ["#2f6b32", "#eef8e8"],
+  ["#5b3d8b", "#f4eefe"],
+  ["#8b1f4a", "#fff0f5"],
+  ["#1f5b8b", "#e9f3ff"],
+  ["#8b6b1f", "#fff8e6"],
+  ["#1f8b6b", "#e6faf3"],
+];
+
+function avatarStyle(id) {
+  const s = String(id || "");
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  const pair = AVATAR_PALETTE[Math.abs(h) % AVATAR_PALETTE.length];
+  return `--av-bg:${pair[0]};--av-fg:${pair[1]}`;
+}
+
+function phoneLandscape() {
+  const ua = navigator.userAgent || "";
+  const coarse = window.matchMedia?.("(pointer: coarse)")?.matches || (navigator.maxTouchPoints > 0 && /Mobi|Android|iPhone|iPad|iPod/i.test(ua));
+  const land = window.matchMedia?.("(orientation: landscape)")?.matches;
+  const short = Math.min(window.innerHeight, window.visualViewport?.height || window.innerHeight) <= 520;
+  return !!(coarse && land && short);
+}
+
+function rotateHintHTML() {
+  if (state.rotateDismissed || !phoneLandscape()) return "";
+  return `<div class="rotate-hint" role="status"><span>豎轉部電話會更好玩</span><button type="button" class="btn-text" data-act="dismiss-rotate">關閉</button></div>`;
+}
+
+function bidTotalChipHTML(v) {
+  if (!v?.bidsRevealed) return "";
+  if (v.phase === "roundResult" || v.phase === "gameOver" || v.phase === "lobby" || v.phase === "bidding") return "";
+  const bids = (v.players || []).map((p) => p.bid);
+  if (bids.some((b) => b == null)) return "";
+  const sum = bids.reduce((a, b) => a + b, 0);
+  const total = v.tricksTotal || v.cardsDealt;
+  const diff = sum - total;
+  let tone = "exact";
+  let cue = "剛好";
+  if (diff > 0) { tone = "over"; cue = `多 ${diff} 墩`; }
+  else if (diff < 0) { tone = "under"; cue = `少 ${-diff} 墩`; }
+  return `<div class="bid-total-chip ${tone}" role="status">合共叫 ${sum}／${total} 墩 · ${cue}</div>`;
+}
+
+function maybeWinBuzz(v) {
+  if (!v || v.phase !== "trickResult" || v.lastTrickDestroyed) return;
+  const idx = (v.players || []).findIndex((p) => p.id === v.yourId);
+  if (idx < 0 || idx !== v.lastWinnerIndex) return;
+  const key = `${v.round}:${v.trickNumber}:${idx}`;
+  if (state.winBuzzKey === key) return;
+  state.winBuzzKey = key;
+  haptic(26);
+  playBeepSequence([523.25, 659.25, 783.99], { type: "triangle", peak: 0.06, attack: 0.012, decay: 0.2, step: 0.07 });
+}
+
+function trickLogButtonHTML(v) {
+  const log = v?.roundTrickLog || [];
+  if (!log.length) return "";
+  if (v.phase === "roundResult" || v.phase === "gameOver") return "";
+  const label = log.length === 1 ? "呢局 1 墩" : `呢局各墩（${log.length}）`;
+  return `<button type="button" class="btn btn-ghost prev-trick-btn" data-act="trick-log">${label}</button>`;
+}
+
+function trickLogSheetHTML(v) {
+  if (!state.trickLogPeek || !v) return "";
+  const log = v.roundTrickLog || [];
+  if (!log.length) return "";
+  const blocks = log.map((t) => {
+    const winnerName = (t.cards || []).find((c) => c.playerIndex === t.winnerIndex)?.playerName || "有人";
+    const winner = t.destroyed ? "呢墩作廢" : `${winnerName}贏咗`;
+    const plays = (t.cards || []).map((played) => {
+      const mine = v.players?.[played.playerIndex]?.id === v.yourId;
+      const won = !t.destroyed && played.playerIndex === t.winnerIndex;
+      return `<div class="prev-play${won ? " won" : ""}">
+        <div class="prev-who">${escapeHtml(played.playerName || "")}${mine ? "（你）" : ""}${won ? " · 贏" : ""}</div>
+        <div class="prev-card">${cardFaceHTML(played.card, { tigressAsPirate: played.tigressAsPirate, compact: true })}</div>
+      </div>`;
+    }).join("");
+    return `<section class="trick-log-item">
+      <h3>第 ${t.trickNumber} 墩 · ${escapeHtml(winner)}</h3>
+      <p>${escapeHtml(t.explanation || "")}</p>
+      <div class="prev-plays">${plays}</div>
+    </section>`;
+  }).join("");
+  return `<div class="overlay center" data-act="close-trick-log">
+    <div class="sheet inspect-sheet" data-stop="1" data-sheet-dismiss="close-trick-log">
+      ${sheetHandleHTML()}
+      <h2>呢局打過嘅墩</h2>
+      <div class="trick-log-list">${blocks}</div>
+      <button class="btn btn-sheet" data-act="close-trick-log">返去牌桌</button>
+    </div>
+  </div>`;
+}
+
 
 function wsUrl() {
   const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -1226,13 +1323,17 @@ function leaveConfirmHTML() {
 
 function showCodeHTML(code) {
   if (!state.showRoomCode || !code) return "";
+  let qr = "";
+  try { qr = `<div class="join-qr">${qrSvg(shareUrl(code), { size: 168, alt: "掃碼加入房間" })}</div>`; }
+  catch { qr = ""; }
   return "<div class=\"overlay center show-code-overlay\" data-act=\"close-show-code\">" +
     "<div class=\"sheet show-code-sheet\" data-stop=\"1\" data-sheet-dismiss=\"close-show-code\">" +
     sheetHandleHTML() +
     "<p class=\"label\">把房號出示俾朋友</p>" +
     "<div class=\"giant-code\">" + escapeHtml(code) + "</div>" +
+    qr +
     "<p class=\"show-code-url\">" + escapeHtml(shareUrl(code)) + "</p>" +
-    "<p class=\"sub\">朋友輸入呢個號，或者打開上面條連結，就可以加入。</p>" +
+    "<p class=\"sub\">朋友用相機掃呢個碼、輸入房號，或者打開上面條連結，就可以加入。</p>" +
     "<button type=\"button\" class=\"btn btn-gold\" data-act=\"copy-code\">複製房號</button>" +
     "<button type=\"button\" class=\"btn btn-sheet\" data-act=\"close-show-code\">關閉</button>" +
     "</div></div>";
@@ -1391,9 +1492,12 @@ app.addEventListener("click", (e) => {
   }
   else if (act === "close-inspect") { state.inspect = null; render(); return; }
   else if (act === "card-legend") { state.inspect = { type: "legend" }; state.scorePeek = false; state.prevTrickPeek = false; render(); return; }
-  else if (act === "score-peek") { state.inspect = null; state.prevTrickPeek = false; state.scorePeek = true; render(); return; }
+  else if (act === "score-peek") { state.inspect = null; state.prevTrickPeek = false; state.trickLogPeek = false; state.scorePeek = true; render(); return; }
   else if (act === "close-score-peek") { state.scorePeek = false; render(); return; }
-  else if (act === "prev-trick") { state.inspect = null; state.scorePeek = false; state.prevTrickPeek = true; render(); return; }
+  else if (act === "prev-trick") { state.inspect = null; state.scorePeek = false; state.trickLogPeek = false; state.prevTrickPeek = true; render(); return; }
+  else if (act === "trick-log") { state.inspect = null; state.scorePeek = false; state.prevTrickPeek = false; state.trickLogPeek = true; render(); return; }
+  else if (act === "close-trick-log") { state.trickLogPeek = false; render(); return; }
+  else if (act === "dismiss-rotate") { state.rotateDismissed = true; render(); return; }
   else if (act === "close-prev-trick") { state.prevTrickPeek = false; render(); return; }
   else if (act === "share-room") { shareRoom(); return; }
   else if (act === "share-results") { shareResults(); return; }
@@ -1427,10 +1531,21 @@ app.addEventListener("click", (e) => {
   else if (act === "dismiss-a2hs") { dismissA2hs(); return; }
   else if (act === "show-code") { state.showRoomCode = true; render(); return; }
   else if (act === "close-show-code") { state.showRoomCode = false; render(); return; }
+  else if (act === "bid-edit") {
+    state.editingBid = true;
+    if (state.bidValue == null && view?.players) {
+      const me = view.players.find((p) => p.id === view.yourId);
+      if (me?.bid != null) state.bidValue = me.bid;
+    }
+    render();
+    return;
+  }
+  else if (act === "bid-edit-cancel") { state.editingBid = false; render(); return; }
   else if (act === "bid-pick") { state.bidValue = Number(t.dataset.n); render(); }
   else if (act === "bid-submit") {
     if (state.bidValue == null) { setError("請先揀你叫幾多墩。"); return; }
     haptic(16);
+    state.editingBid = false;
     send({ type: "bid", value: state.bidValue });
   }
   else if (act === "select-card" || act === "play-card") {
@@ -1696,7 +1811,7 @@ function renderLobby() {
       if (!h.connected) tags.push(`<span class="pill down">已斷線</span>`);
       const display = h.id === v.yourId ? (state.name || h.name) : h.name;
       return `<div class="player-row${h.id === v.yourId ? " me" : ""}">
-        <div class="avatar ${h.isHost ? "gold" : ""}">${escapeHtml((display || "?").slice(0, 1))}</div>
+        <div class="avatar tone" style="${avatarStyle(h.id)}">${escapeHtml((display || "?").slice(0, 1))}</div>
         <div class="meta">
           <div class="name">${escapeHtml(display)}${h.id === v.yourId ? "（你）" : ""}</div>
         </div>
@@ -1704,7 +1819,7 @@ function renderLobby() {
       </div>`;
     }),
     ...ai.map((a) => `<div class="player-row">
-      <div class="avatar ai">${escapeHtml(a.name.slice(0, 1))}</div>
+      <div class="avatar ai tone" style="${avatarStyle(a.id || a.name)}">${escapeHtml(a.name.slice(0, 1))}</div>
       <div class="meta">
         <div class="name">${escapeHtml(a.name)}</div>
         <div class="sub">電腦對手 · 開始後入座</div>
@@ -1789,7 +1904,7 @@ function renderLobby() {
           if (!v.aiFill && humans.length < 2) return "至少再等多一個人加入，或者開電腦補位。";
           return "設定好人數就可以開始。";
         })()}</p>` : `<p class="start-hint">人齊喇，可以開始。把房號傳俾未入嚟嘅朋友。</p>`}
-        <button class="btn btn-gold" data-act="start" ${canStart ? "" : "disabled"}>開始遊戲</button>` : ""}
+        <button class="btn btn-gold${canStart ? " can-start" : ""}" data-act="start" ${canStart ? "" : "disabled"}>開始遊戲</button>` : ""}
       </div>
     </div>
     ${showCodeHTML(v.code)}
@@ -2004,6 +2119,7 @@ function circleTableHTML(v) {
       : (v.phase === "playing" && !(v.trick || []).length ? v.currentPlayerIndex : -1);
     const isLead = leadIndex === playerIndex;
     const leadTag = !isLead || bidding ? "" : ((v.trick || []).length ? "領牌" : "先出");
+    const dealerTag = playerIndex === v.dealerIndex ? "莊" : "";
     let card = "";
     if (played) {
       const justPlayed = isJustPlayed(played.card.id);
@@ -2027,13 +2143,13 @@ function circleTableHTML(v) {
       ${scoreFloaterHTML(v, p.id, i)}
       <div class="seat-info">
         <div class="avatar-wrap">
-          <div class="avatar ${thinking ? "gold" : p.isAI ? "ai" : ""} ${win ? "win-ring" : ""}${bidLine.busted ? " bust-avatar" : ""}">${escapeHtml(p.name.slice(0, 1))}</div>
+          <div class="avatar tone ${thinking ? "gold" : p.isAI ? "ai" : ""} ${win ? "win-ring" : ""}${bidLine.busted ? " bust-avatar" : ""}" style="${avatarStyle(p.id)}">${escapeHtml(p.name.slice(0, 1))}</div>
           <span class="conn-dot ${connected ? "on" : "off"}" title="${connected ? (p.isAI ? "電腦" : "已連線") : "已斷線"}" aria-label="${connected ? (p.isAI ? "電腦" : "已連線") : "已斷線"}"></span>
         </div>
         <div class="seat-meta">
           <div class="nm-row">
             <span class="nm">${escapeHtml(p.name)}${isMe ? "（你）" : ""}</span>
-            ${leadTag ? `<span class="seat-lead">${leadTag}</span>` : ""}
+            ${dealerTag ? `<span class="seat-dealer">莊</span>` : ""}${leadTag ? `<span class="seat-lead">${leadTag}</span>` : ""}
             ${thinking ? `<span class="seat-thinking">諗緊</span>` : ""}
           </div>
           ${bidLine.html}
@@ -2139,9 +2255,13 @@ function scorePeekHTML(v) {
 }
 
 function prevTrickButtonHTML(v) {
-  if (!v?.previousTrick || v.phase === "trickResult") return "";
-  if (v.phase === "roundResult" || v.phase === "gameOver") return "";
-  return `<div class="prev-trick-bar"><button type="button" class="btn btn-ghost prev-trick-btn" data-act="prev-trick">上一墩</button></div>`;
+  if (!v || v.phase === "roundResult" || v.phase === "gameOver") return "";
+  const prev = (v.previousTrick && v.phase !== "trickResult")
+    ? `<button type="button" class="btn btn-ghost prev-trick-btn" data-act="prev-trick">上一墩</button>`
+    : "";
+  const log = trickLogButtonHTML(v);
+  if (!prev && !log) return "";
+  return `<div class="prev-trick-bar">${prev}${log}</div>`;
 }
 
 function prevTrickSheetHTML(v) {
@@ -2150,7 +2270,8 @@ function prevTrickSheetHTML(v) {
   const winner = t.winnerIndex != null ? (v.players || [])[t.winnerIndex] : null;
   const winnerName = winner?.name || t.cards.find((c) => c.playerIndex === t.winnerIndex)?.playerName || "";
   let result;
-  if (t.destroyed) result = "呢墩作廢，無人贏（八爪魚或白鯨）。";
+  if (t.explanation) result = t.explanation;
+  else if (t.destroyed) result = "呢墩作廢，無人贏（八爪魚或白鯨）。";
   else result = `${winnerName || "有人"}贏咗呢墩。`;
   const plays = (t.cards || []).map((played) => {
     const mine = (v.players || [])[played.playerIndex]?.id === v.yourId;
@@ -2233,10 +2354,12 @@ function renderTable() {
   const bidding = v.phase === "bidding";
   const myBid = me?.bid;
   const alreadyBid = bidding && me?.hasBid;
+  if (!bidding) state.editingBid = false;
 
   let bidPanel = "";
   if (bidding) {
     const n = v.cardsDealt;
+    const editing = alreadyBid && state.editingBid;
     const btns = Array.from({ length: n + 1 }, (_, i) => {
       const on = state.bidValue === i ? "on" : "";
       const zero = i === 0 ? " bid-zero" : "";
@@ -2245,22 +2368,37 @@ function renderTable() {
     }).join("");
     const bidCount = (v.players || []).filter((p) => p.hasBid).length;
     const bidTotal = (v.players || []).length;
-    bidPanel = `<div class="bid-panel">
-      <h3>${alreadyBid ? "已叫牌，等其他人" : "你估會贏幾墩？"}</h3>
-      <p class="bid-progress">已叫 ${bidCount}／${bidTotal} 人</p>
-      ${(() => {
-        const waitingBid = (v.players || []).filter((p) => !p.hasBid);
-        if (!waitingBid.length) return '<p class="bid-wait done">所有人都叫咗。</p>';
-        return '<div class="bid-wait" aria-live="polite"><span>仲等</span> ' + waitingBid.map((p) => '<span class="bid-wait-name">' + escapeHtml(p.name) + (p.id === v.yourId ? '（你）' : '') + '</span>').join('') + '</div>';
-      })()}
-      <p>${alreadyBid ? `你叫咗 ${myBid} 墩。等其他人一齊叫完先揭曉。` : `睇完手牌先叫，可以叫 0 到 ${n}。其他人叫咩要等齊先睇到。`}</p>
-      ${alreadyBid ? "" : `<p class="bid-hint">${escapeHtml(bidHint(n, state.bidValue))}</p>
-        <div class="bid-grid">${btns}</div>
-        <button class="btn btn-gold" data-act="bid-submit" ${state.bidValue == null ? "disabled" : ""}>${state.bidValue == null ? "請先揀叫幾多墩" : `確定叫 ${state.bidValue} 墩`}</button>`}
+    const waitingBid = (v.players || []).filter((p) => !p.hasBid);
+    const waitingHTML = waitingBid.length
+      ? ("<div class=\"bid-wait\" aria-live=\"polite\"><span>仲等</span> " + waitingBid.map((p) => "<span class=\"bid-wait-name\">" + escapeHtml(p.name) + (p.id === v.yourId ? "（你）" : "") + "</span>").join("") + "</div>")
+      : "<p class=\"bid-wait done\">所有人都叫咗。</p>";
+    const progress = `<p class="bid-progress">已叫 ${bidCount}／${bidTotal} 人</p>${waitingHTML}`;
+    if (alreadyBid && !editing) {
+      bidPanel = `<div class="bid-panel">
+      <h3>已叫牌，等其他人</h3>
+      ${progress}
+      <p>你叫咗 ${myBid} 墩。其他人叫咩要等齊先睇到。齊人揭曉之前你仍然可以改叫。</p>
+      <button type="button" class="btn btn-sheet" data-act="bid-edit">改叫牌</button>
     </div>`;
+    } else {
+      const submitLabel = state.bidValue == null
+        ? "請先揀叫幾多墩"
+        : (alreadyBid ? `確定改叫 ${state.bidValue} 墩` : `確定叫 ${state.bidValue} 墩`);
+      bidPanel = `<div class="bid-panel">
+      <h3>${alreadyBid ? "改叫幾多墩？" : "你估會贏幾墩？"}</h3>
+      ${progress}
+      <p>${alreadyBid ? `而家叫咗 ${myBid} 墩。改完仍然會等其他人一齊揭曉。` : `睇完手牌先叫，可以叫 0 到 ${n}。其他人叫咩要等齊先睇到。`}</p>
+      <p class="bid-hint">${escapeHtml(bidHint(n, state.bidValue))}</p>
+      <div class="bid-grid">${btns}</div>
+      <div class="confirm-actions">
+        ${alreadyBid ? `<button type="button" class="btn btn-sheet" data-act="bid-edit-cancel">唔改</button>` : ""}
+        <button class="btn btn-gold" data-act="bid-submit" ${state.bidValue == null ? "disabled" : ""}>${submitLabel}</button>
+      </div>
+    </div>`;
+    }
   }
 
-  const legal = new Set(v.legalCardIds || []);
+    const legal = new Set(v.legalCardIds || []);
   const canPlay = v.isMyTurn && v.phase === "playing";
   const handCards = sortHand(v.myHand || []);
   const overlap = handOverlap(handCards.length);
@@ -2355,6 +2493,7 @@ function renderTable() {
           <button class="btn-text" data-act="rules">規則</button>
         </div>
       </div>
+      ${bidTotalChipHTML(v)}
       ${circleTableHTML(v)}
       <div class="table-dock">
         ${prevTrickButtonHTML(v)}
@@ -2371,6 +2510,7 @@ function renderTable() {
     ${v.phase === "roundResult" || v.phase === "gameOver" ? scoreHTML(v) : ""}
     ${scorePeekHTML(v)}
     ${prevTrickSheetHTML(v)}
+    ${trickLogSheetHTML(v)}
     ${inspectHTML()}
     ${leaveConfirmHTML()}${showCodeHTML(v.code)}
     ${roundSplashHTML()}
@@ -2433,8 +2573,10 @@ function scoreHTML(v) {
   let mineSummary = "";
   if (meRow) {
     const made = meRow.bid === meRow.taken;
-    mineSummary = `<div class="score-hero ${made ? "made" : "missed"}">
-      <div class="hero-kicker">${made ? "估中！" : "估錯"}</div>
+    const busted = meRow.taken > meRow.bid;
+    const kicker = made ? "叫中！" : busted ? "爆咗" : "唔夠墩";
+    mineSummary = `<div class="score-hero ${made ? "made" : busted ? "missed bust" : "missed short"}">
+      <div class="hero-kicker">${kicker}</div>
       <p>你叫 ${meRow.bid} 贏 ${meRow.taken}，叫牌分 ${signed(meRow.bidPoints)}${meRow.bonus ? `，獎勵 +${meRow.bonus}` : ""}，本局 ${signed(meRow.roundTotal)}</p>
       <div class="hero-total">總分 <strong>${meRow.runningTotal}</strong></div>
     </div>`;
@@ -2520,7 +2662,7 @@ function render() {
   else if (screen === "lobby") html = renderLobby();
   else if (screen === "play") html = renderTable();
   else html = renderHome();
-  app.innerHTML = html;
+  app.innerHTML = rotateHintHTML() + html;
   if (screen === "play") applyFlyAnim(state.view);
   bindCardLongPress();
   bindCodeBoxes();
@@ -2545,8 +2687,9 @@ async function boot() {
 
 boot();
 window.addEventListener("resize", () => {
-  if (state.screen === "play") render();
+  if (state.screen === "play" || phoneLandscape() || document.querySelector(".rotate-hint")) render();
 });
+window.addEventListener("orientationchange", () => render());
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") releaseWakeLock();
   else syncWakeLock();

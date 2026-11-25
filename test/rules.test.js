@@ -14,6 +14,7 @@ import {
   isLegal,
   activeBeast,
   currentTrickLead,
+  explainTrick,
 } from "../server/rules.js";
 
 const Y = "yellow",
@@ -401,4 +402,29 @@ test("currentTrickLead: pirate currently beats mermaid mid-trick", () => {
   const lead = currentTrickLead([P(0, special(MER, 0)), P(1, special(PIR, 0))]);
   assert.equal(lead.playerIndex, 1);
   assert.equal(lead.cardLabel, "海盜");
+});
+
+test("explainTrick: mermaid captures Skull King", () => {
+  const trick = [P(0, special(SK)), P(1, special(MER, 0))];
+  assert.equal(resolveTrick(trick).winnerPlayerIndex, 1);
+  assert.match(explainTrick(trick), /人魚捕獲骷髏王/);
+});
+
+test("explainTrick: Skull King beats pirates", () => {
+  const trick = [P(0, special(PIR, 0)), P(1, special(SK))];
+  assert.match(explainTrick(trick), /骷髏王最大/);
+});
+
+test("explainTrick: pirate beats mermaid and numbers; black trumps; follow suit; escapes; beasts", () => {
+  assert.match(explainTrick([P(0, special(MER, 0)), P(1, special(PIR, 0))]), /海盜大過人魚/);
+  assert.match(explainTrick([P(0, suit(Y, 14)), P(1, special(PIR, 0))]), /海盜大過花色牌/);
+  assert.match(explainTrick([P(0, special(MER, 0)), P(1, suit(B, 14))]), /人魚大過花色牌/);
+  assert.match(explainTrick([P(0, suit(Y, 14)), P(1, suit(B, 2))]), /骷髏旗係王牌/);
+  assert.match(explainTrick([P(0, suit(B, 3)), P(1, suit(B, 12))]), /跟骷髏旗當中最大/);
+  assert.match(explainTrick([P(0, suit(Y, 5)), P(1, suit(Y, 12)), P(2, suit(G, 14))]), /跟黃花當中最大/);
+  assert.match(explainTrick([P(0, special(ESC, 0)), P(1, special(ESC, 1))]), /全部都係逃脫/);
+  assert.match(explainTrick([P(0, suit(Y, 14)), P(1, special(KRA))]), /八爪魚令呢墩作廢/);
+  assert.match(explainTrick([P(0, special(PIR, 0)), P(1, special(WH))]), /白鯨[\s\S]*作廢/);
+  assert.match(explainTrick([P(0, special(PIR, 0)), P(1, suit(Y, 7)), P(2, special(WH))]), /白鯨令特殊牌唔計/);
+  assert.match(explainTrick([P(0, special(TIG), true), P(1, suit(Y, 14))]), /海盜/);
 });

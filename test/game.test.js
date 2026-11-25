@@ -600,3 +600,45 @@ test("view currentTrickLead is leading:false when only escapes are down", () => 
   assert.equal(view.currentTrickLead.leading, false);
   assert.equal(view.currentTrickLead.destroyed, undefined);
 });
+
+test("a player can change their bid until everyone has bid", () => {
+  const g = new Game(seats(2, 0));
+  g.start();
+  assert.equal(g.submitBid("h0", 0).ok, true);
+  const hidden = g.viewFor("h1");
+  assert.equal(hidden.players[0].hasBid, true);
+  assert.equal(hidden.players[0].bid, null);
+  const changed = g.submitBid("h0", 1);
+  assert.equal(changed.ok, true);
+  assert.equal(changed.changed, true);
+  assert.equal(g.players[0].bid, 1);
+  assert.equal(g.phase, PHASE.BIDDING);
+  const self = g.viewFor("h0");
+  assert.equal(self.players[0].bid, 1);
+  const stillHidden = g.viewFor("h1");
+  assert.equal(stillHidden.players[0].bid, null);
+  assert.equal(stillHidden.players[0].hasBid, true);
+  assert.equal(g.submitBid("h1", 0).ok, true);
+  assert.equal(g.phase, PHASE.PLAYING);
+  assert.ok(g.submitBid("h0", 0).error);
+});
+
+test("completed tricks keep an explanation and a round log", () => {
+  const g = new Game(seats(2, 0));
+  g.start();
+  g.players[0].hand = [makeSuit("yellow", 3)];
+  g.players[1].hand = [makeSuit("yellow", 12)];
+  g.players[0].bid = 0;
+  g.players[1].bid = 1;
+  g.phase = PHASE.PLAYING;
+  g.currentPlayerIndex = 1;
+  g.playCard("h1", "yellow-12");
+  g.playCard("h0", "yellow-3");
+  assert.equal(g.phase, PHASE.TRICK_RESULT);
+  const v = g.viewFor("h0");
+  assert.match(v.lastTrickExplanation || "", /跟黃花當中最大/);
+  assert.equal(v.roundTrickLog.length, 1);
+  assert.equal(v.roundTrickLog[0].winnerIndex, 1);
+  assert.match(v.roundTrickLog[0].explanation, /跟黃花當中最大/);
+  assert.equal(v.roundTrickLog[0].cards.length, 2);
+});

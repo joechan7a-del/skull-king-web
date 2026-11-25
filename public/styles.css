@@ -2070,3 +2070,99 @@ button, a, .btn, .btn-text, .sk-play, .sk-wrap, .seat-card, .code, input, .bid-g
   .trick-caption, .round-splash { opacity: 1; }
   .confetti-burst { display: none; }
 }
+/* Cycle 6 evening polish */
+.avatar.tone {
+  background: var(--av-bg, var(--white-14));
+  color: var(--av-fg, #fff);
+}
+.avatar.tone.gold {
+  background: var(--gold);
+  color: var(--ink);
+}
+.seat.is-me .avatar {
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--gold);
+}
+.seat-dealer {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  background: rgba(237, 191, 89, 0.22);
+  color: var(--gold-soft);
+  border-radius: 999px;
+  padding: 1px 6px;
+}
+.bid-total-chip {
+  margin: 4px 12px 2px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 800;
+  border-radius: 999px;
+  padding: 6px 10px;
+  letter-spacing: 0.01em;
+}
+.bid-total-chip.exact { background: rgba(125, 255, 154, 0.16); color: #b8ffc9; }
+.bid-total-chip.over { background: rgba(255, 180, 80, 0.2); color: #ffd59a; }
+.bid-total-chip.under { background: rgba(140, 200, 255, 0.16); color: #c5e4ff; }
+.trick-caption.sticky {
+  animation: trick-caption-in 0.35s ease-out both;
+  max-width: 82%;
+}
+@keyframes trick-caption-in {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+.trick-caption.mine {
+  color: #1a1206;
+  background: linear-gradient(180deg, #fff3c0, var(--gold));
+  border-color: #fff4c4;
+  text-shadow: none;
+}
+.trick-caption .trick-why {
+  display: block;
+  margin-top: 4px;
+  font-size: clamp(11px, 3.4cqw, 13px);
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: 0;
+}
+.trick-caption.mine .trick-why { color: #4a3208; }
+.btn-gold.can-start {
+  animation: start-pulse 1.6s ease-in-out infinite;
+}
+@keyframes start-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(237, 191, 89, 0.6); }
+  50% { box-shadow: 0 0 0 8px rgba(237, 191, 89, 0); }
+}
+.rotate-hint {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  padding-top: calc(8px + var(--safe-top));
+  background: #142c4e;
+  color: var(--cream, #f4efe4);
+  font-weight: 700;
+  font-size: 14px;
+}
+.join-qr {
+  display: grid;
+  place-items: center;
+  margin: 10px auto 8px;
+  width: fit-content;
+  background: #fff;
+  border-radius: 16px;
+  padding: 10px;
+}
+.join-qr-svg { display: block; width: min(168px, 64vw); height: auto; }
+.score-hero.missed.bust { background: rgba(196, 70, 70, 0.18); }
+.score-hero.missed.short { background: rgba(196, 140, 70, 0.16); }
+.trick-log-list { display: flex; flex-direction: column; gap: 14px; margin: 0 0 16px; }
+.trick-log-item h3 { font-size: 15px; margin: 0 0 4px; }
+.trick-log-item p { margin: 0 0 8px; font-size: 13px; color: var(--white-70, rgba(255,255,255,0.75)); }
+@media (prefers-reduced-motion: reduce) {
+  .btn-gold.can-start, .trick-caption.sticky { animation: none; }
+}

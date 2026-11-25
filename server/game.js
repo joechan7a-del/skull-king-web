@@ -10,6 +10,7 @@ import {
   ledSuit,
   SUIT_INFO,
   currentTrickLead,
+  explainTrick,
 } from "./rules.js";
 import { bid as aiBid, choosePlay as aiChoosePlay } from "./ai.js";
 
@@ -46,6 +47,7 @@ export class Game {
     this.lastTrickDestroyed = false;
     this.lastTrickDetails = [];
     this.previousTrick = null;
+    this.roundTrickLog = [];
     this.pendingTigress = null;
     this.scores = [];
     this.tricksPlayed = 0;
@@ -84,6 +86,7 @@ export class Game {
     this.lastTrickDestroyed = false;
     this.lastTrickDetails = [];
     this.previousTrick = null;
+    this.roundTrickLog = [];
     this.pendingTigress = null;
     this.tricksPlayed = 0;
     this.phase = PHASE.BIDDING;
@@ -128,19 +131,22 @@ export class Game {
     if (index < 0) return { error: "找不到呢位玩家。" };
     const player = this.players[index];
     if (player.isAI) return { error: "電腦玩家會自己叫牌。" };
-    if (player.bid != null) return { error: "你已經叫咗牌。" };
     const bid = Math.min(this.cardsDealt, Math.max(0, Number(value)));
     if (!Number.isInteger(bid) || bid !== Number(value)) {
       return { error: `叫牌要係 0 到 ${this.cardsDealt} 嘅整數。` };
     }
+    const changing = player.bid != null;
+    if (changing && player.bid === bid) return { ok: true };
     player.bid = bid;
     this.revision++;
     const waiting = this.players.filter((p) => p.bid == null).map((p) => p.name);
     if (waiting.length) {
-      this.statusMessage = `已叫牌。仲等緊 ${waiting.join("、")}。`;
+      this.statusMessage = changing
+        ? `${player.name}改叫咗牌。仲等緊 ${waiting.join("、")}。`
+        : `已叫牌。仲等緊 ${waiting.join("、")}。`;
     }
     this._maybeRevealBids();
-    return { ok: true };
+    return { ok: true, changed: changing };
   }
 
   playCard(playerId, cardId, tigressAsPirate) {
@@ -235,6 +241,21 @@ export class Game {
       const whale = result.effect === "whiteWhale" ? "白鯨令最高數字贏，" : "";
       this.statusMessage = `${whale}${winner.name}贏咗呢墩。` + extra;
     }
+    this.roundTrickLog = this.roundTrickLog || [];
+    this.roundTrickLog.push({
+      trickNumber: this.tricksPlayed + 1,
+      winnerIndex: this.lastWinnerIndex,
+      destroyed: !!this.lastTrickDestroyed,
+      effect: result.effect || null,
+      explanation: explainTrick(this.lastTrick),
+      details: [...(this.lastTrickDetails || [])],
+      cards: this.lastTrick.map((p) => ({
+        playerIndex: p.playerIndex,
+        playerName: this.players[p.playerIndex]?.name || "",
+        card: p.card,
+        tigressAsPirate: p.tigressAsPirate,
+      })),
+    });
     this.trick = [];
     this.tricksPlayed += 1;
     this.phase = PHASE.TRICK_RESULT;
@@ -252,6 +273,7 @@ export class Game {
       winnerIndex: this.lastWinnerIndex,
       destroyed: !!this.lastTrickDestroyed,
       details: [...(this.lastTrickDetails || [])],
+      explanation: explainTrick(this.lastTrick || []),
     };
   }
 
@@ -425,6 +447,8 @@ export class Game {
       lastTrickDestroyed: this.phase === PHASE.TRICK_RESULT ? this.lastTrickDestroyed : false,
       lastTrickDetails: this.phase === PHASE.TRICK_RESULT ? this.lastTrickDetails : [],
       previousTrick: this.previousTrick,
+      lastTrickExplanation: this.phase === PHASE.TRICK_RESULT ? explainTrick(this.lastTrick || []) : "",
+      roundTrickLog: this.roundTrickLog || [],
       pendingTigress: !!(
         this.phase === PHASE.CHOOSING_TIGRESS &&
         this.pendingTigress &&
