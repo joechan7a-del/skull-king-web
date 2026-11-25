@@ -28,13 +28,17 @@ test("the app shell is locked to the visual viewport height", () => {
   assert.match(shell, /overflow:\s*hidden/);
 });
 
-test("in-game primary controls sit in a non-scrolling dock and the table shrinks to fit", () => {
+test("in-game primary controls overlay a reserved dock and do not shrink the table", () => {
   const dock = block(css, ".table-dock");
   assert.doesNotMatch(dock, /overflow-y:\s*auto/);
   assert.match(dock, /overflow-y:\s*hidden/);
-  assert.match(dock, /flex:\s*0 0 auto/);
+  assert.match(dock, /position:\s*absolute/);
+  assert.match(dock, /bottom:\s*0/);
+  const screen = block(css, ".table-screen");
+  assert.match(screen, /--dock-reserve/);
   const wrap = block(css, ".circle-wrap");
   assert.match(wrap, /flex:\s*1 1 auto/);
+  assert.match(wrap, /--dock-reserve/);
   const min = wrap.match(/min-height:\s*(\d+)px/);
   assert.ok(min, "circle-wrap should have a compact min-height");
   assert.ok(Number(min[1]) <= 180, `table min-height ${min[1]}px is too tall to keep bids and the hand on screen`);
@@ -123,14 +127,14 @@ test("every game sound reuses the soft UI click", () => {
   assert.doesNotMatch(js, /createOscillator/);
 });
 
-test("tableArrowsSVG uses three large clockwise arrows without a 順時針 label", () => {
+test("tableArrowsSVG uses one thin clockwise arc without a 順時針 label", () => {
   const fn = js.slice(js.indexOf("function tableArrowsSVG"), js.indexOf("function resetTrickAnim"));
-  assert.match(fn, /const count = 3/);
+  assert.doesNotMatch(fn, /const count = 3/);
   assert.doesNotMatch(fn, /const n = 8/);
-  assert.doesNotMatch(fn, /-3\.4,-2/);
-  assert.match(fn, /A \$\{rx\} \$\{ry\} 0 0 1/);
-  assert.match(fn, /-15,-9/);
-  assert.match(fn, /stroke-width="4\.4"/);
+  assert.doesNotMatch(fn, /stroke-width="4\.4"/);
+  assert.doesNotMatch(fn, /stroke-width="7\.2"/);
+  assert.match(fn, /A \$\{rx\} \$\{ry\} 0 \$\{large\} 1/);
+  assert.match(fn, /stroke-width="1\.6"/);
   assert.doesNotMatch(js, /arrow-hint">順時針/);
   assert.doesNotMatch(js, /順時針出牌/);
   assert.match(css, /\.table-arrows/);
@@ -149,7 +153,7 @@ test("trick and round results are overlay dialogs and do not shrink the table", 
   const score = js.slice(js.indexOf("function scoreHTML"), js.indexOf("function renderRules"));
   assert.match(score, /class="overlay center"/);
   assert.match(score, /下一局/);
-  assert.match(html, /app\.js\?v=c16/);
+  assert.match(html, /app\.js\?v=c17/);
 });
 
 test("AI plays and post-win pauses are modestly longer", () => {
@@ -168,8 +172,31 @@ test("the confirm-to-play bar overlays the dock and does not shrink the table", 
   assert.doesNotMatch(bar, /margin:\s*0 0 8px/);
   assert.match(js, /function confirmBarHTML/);
   const dock = block(css, ".table-dock");
-  assert.match(dock, /position:\s*relative/);
-  assert.match(dock, /flex:\s*0 0 auto/);
+  assert.match(dock, /position:\s*absolute/);
+  const barParent = block(css, ".table-dock");
+  assert.match(barParent, /bottom:\s*0/);
+});
+
+test("reconnect banner and special-play flourish are overlays and do not shrink the table", () => {
+  const banner = block(css, ".banner");
+  assert.match(banner, /position:\s*absolute/);
+  assert.doesNotMatch(banner, /position:\s*sticky/);
+  assert.match(js, /function bannerHTML/);
+  assert.match(js, /正在重新連接/);
+  assert.match(css, /\.flourish-overlay/);
+  const fl = block(css, ".flourish-overlay");
+  assert.match(fl, /position:\s*absolute/);
+  const render = js.slice(js.indexOf("function renderTable"), js.indexOf("function handOverlap"));
+  assert.match(render, /flourishBannerHTML/);
+  const felt = render.slice(render.indexOf("table-felt felt-rich"), render.indexOf("table-felt felt-rich") + 180);
+  assert.doesNotMatch(felt, /flourishBannerHTML/);
+});
+
+test("hand cards no longer show a question-mark badge", () => {
+  assert.doesNotMatch(js, /class="card-info"/);
+  assert.doesNotMatch(js, /aria-label="睇牌義">\?</);
+  assert.match(js, /data-act="inspect"/);
+  assert.match(js, /function openInspect/);
 });
 
 test("a selected hand card keeps its size and stacks above its neighbours", () => {

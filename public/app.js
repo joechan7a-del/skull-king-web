@@ -257,7 +257,9 @@ function flourishBannerHTML() {
   if (!state.flourish) return "";
   const elapsed = performance.now() - (state.flourish.startedAt || 0);
   if (elapsed >= 1100) return "";
-  return `<div class="flourish-banner" data-kind="${escapeHtml(state.flourish.kind)}" role="status">${escapeHtml(state.flourish.text)}</div>`;
+  return `<div class="flourish-overlay" role="status">
+    <div class="flourish-banner" data-kind="${escapeHtml(state.flourish.kind)}">${escapeHtml(state.flourish.text)}</div>
+  </div>`;
 }
 
 function maybeCelebrateMake(v) {
@@ -2132,34 +2134,21 @@ function isPlayerThinking(p, v) {
 function tableArrowsSVG() {
   const cx = 50;
   const cy = 50;
-  const rx = 32;
-  const ry = 29;
-  const count = 3;
-  const sweepDeg = 86;
-  const paths = [];
-  const heads = [];
-  for (let i = 0; i < count; i++) {
-    const gap = 360 / count;
-    const startDeg = 90 + i * gap + (gap - sweepDeg) / 2;
-    const a0 = (startDeg * Math.PI) / 180;
-    const a1 = ((startDeg + sweepDeg) * Math.PI) / 180;
-    const x0 = cx + rx * Math.cos(a0);
-    const y0 = cy + ry * Math.sin(a0);
-    const x1 = cx + rx * Math.cos(a1);
-    const y1 = cy + ry * Math.sin(a1);
-    const rot = Math.atan2(ry * Math.cos(a1), -rx * Math.sin(a1)) * 180 / Math.PI;
-    paths.push(
-      `<path d="M ${x0.toFixed(2)} ${y0.toFixed(2)} A ${rx} ${ry} 0 0 1 ${x1.toFixed(2)} ${y1.toFixed(2)}" />`,
-    );
-    heads.push(
-      `<polygon points="0,0 -15,-9 -9,0 -15,9" transform="translate(${x1.toFixed(2)} ${y1.toFixed(2)}) rotate(${rot.toFixed(2)})" />`,
-    );
-  }
+  const rx = 22;
+  const ry = 19.5;
+  const startDeg = 115;
+  const sweepDeg = 302;
+  const a0 = (startDeg * Math.PI) / 180;
+  const a1 = ((startDeg + sweepDeg) * Math.PI) / 180;
+  const x0 = (cx + rx * Math.cos(a0)).toFixed(2);
+  const y0 = (cy + ry * Math.sin(a0)).toFixed(2);
+  const x1 = (cx + rx * Math.cos(a1)).toFixed(2);
+  const y1 = (cy + ry * Math.sin(a1)).toFixed(2);
+  const rot = (Math.atan2(ry * Math.cos(a1), -rx * Math.sin(a1)) * 180 / Math.PI).toFixed(2);
+  const large = sweepDeg > 180 ? 1 : 0;
   return `<svg class="table-arrows" viewBox="0 0 100 100" aria-hidden="true">
-    <g fill="none" stroke="#1a1206" stroke-width="7.2" stroke-linecap="round" stroke-linejoin="round">${paths.join("")}</g>
-    <g fill="#1a1206">${heads.join("")}</g>
-    <g fill="none" stroke="#edbf59" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round">${paths.join("")}</g>
-    <g fill="#edbf59">${heads.join("")}</g>
+    <path d="M ${x0} ${y0} A ${rx} ${ry} 0 ${large} 1 ${x1} ${y1}" fill="none" stroke="#edbf59" stroke-width="1.6" stroke-linecap="round" />
+    <polygon points="0,0 -7.2,-3.1 -4.6,0 -7.2,3.1" fill="#edbf59" transform="translate(${x1} ${y1}) rotate(${rot})" />
   </svg>`;
 }
 
@@ -2367,7 +2356,7 @@ function circleTableHTML(v) {
   const suitClass = led ? ` suit-${led}` : "";
   return `<div class="circle-wrap">
     <div class="circle-table n-${n} ${destroyed ? "destroyed" : ""}" role="group" aria-label="牌桌，出牌順序順時針">
-      <div class="table-felt felt-rich${suitClass}">${tableArrowsSVG()}${center}${flourishBannerHTML()}</div>
+      <div class="table-felt felt-rich${suitClass}">${tableArrowsSVG()}${center}</div>
       ${seats}
     </div>
   </div>`;
@@ -2629,9 +2618,6 @@ function renderTable() {
       const dealCls = dealing ? " deal-in" : "";
       const style = `style="margin-right:${i === handCards.length - 1 ? 0 : overlap}px;z-index:${selected ? 40 : i};--deal-i:${i};--deal-base:${dealBaseMs}ms"`;
       const inner = cardFaceHTML(c, { dimmed: dim });
-      const info = c.special
-        ? `<button class="card-info" data-act="inspect" data-id="${escapeHtml(c.id)}" aria-label="睇牌義">?</button>`
-        : "";
       let tag = "";
       if (isLegal && v.ledSuit) {
         tag = c.special
@@ -2645,13 +2631,12 @@ function renderTable() {
       if (isLegal) {
         return `<div class="sk-wrap${selected ? " selected" : ""} playable${dealCls}" ${style}>
           <button class="sk-play" data-act="select-card" data-id="${escapeHtml(c.id)}">${inner.replace("sk-card ", `sk-card legal ${selected ? "picked " : ""}`)}</button>
-          ${info}${tag}
+          ${tag}
         </div>`;
       }
       return `<div class="sk-wrap inspect-only${dim ? " unplayable" : ""}${dealCls}${shaking}" ${style}>
         <button class="sk-play" data-act="inspect" data-id="${escapeHtml(c.id)}" data-why="${escapeHtml(why)}">${inner}</button>
-        ${info}
-      </div>`;
+              </div>`;
     })
     .join("")}</div></div>`;
 
@@ -2661,6 +2646,7 @@ function renderTable() {
   return `
     ${bannerHTML()}
     <div class="screen table-screen${ledClass ? ` led-${ledClass}` : ""}">
+      ${flourishBannerHTML()}
       <div class="table-header">
         <div class="header-left">
           <button class="btn-text" data-act="leave">離開</button>

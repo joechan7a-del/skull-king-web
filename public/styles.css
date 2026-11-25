@@ -47,6 +47,7 @@ body {
 }
 
 #app {
+  position: relative;
   height: var(--vvh, 100svh);
   max-height: var(--vvh, 100svh);
   min-height: 0;
@@ -258,14 +259,17 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
 
 /* Banner / toast */
 .banner {
-  position: sticky;
+  position: absolute;
   top: 0;
-  z-index: 20;
+  left: 0;
+  right: 0;
+  z-index: 40;
   padding: 8px 16px;
   padding-top: calc(8px + var(--safe-top));
   text-align: center;
   font-size: 13px;
   font-weight: 600;
+  pointer-events: none;
 }
 .banner.warn { background: #8a3b2c; color: #fff; }
 .banner.info { background: #1c4a62; color: var(--gold-soft); }
@@ -427,6 +431,7 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
 /* Table */
 .table-screen {
   position: relative;
+  --dock-reserve: 208px;
   padding-top: calc(6px + var(--safe-top));
   padding-bottom: calc(6px + var(--safe-bottom));
   padding-left: 10px;
@@ -434,7 +439,11 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   overflow: hidden;
 }
 .table-dock {
-  position: relative;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 18;
   flex: 0 0 auto;
   min-height: 0;
   overflow-x: hidden;
@@ -442,6 +451,9 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   overscroll-behavior: none;
   display: flex;
   flex-direction: column;
+  padding: 8px 10px calc(6px + var(--safe-bottom));
+  background: linear-gradient(to top, #050d1a 58%, rgba(5, 13, 26, 0.92) 78%, rgba(5, 13, 26, 0) 100%);
+  pointer-events: auto;
 }
 .table-header {
   display: grid;
@@ -479,7 +491,7 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   width: 100%;
   min-height: 148px;
   max-height: none;
-  margin: 2px 0 0;
+  margin: 2px 0 var(--dock-reserve, 208px) 0;
   padding: 52px 44px 68px;
   container-type: size;
   display: grid;
@@ -640,7 +652,7 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   pointer-events: none;
   overflow: visible;
   z-index: 1;
-  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.85)) drop-shadow(0 0 7px rgba(237, 191, 89, 0.55));
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.75));
 }
 .table-center {
   position: absolute;
@@ -1906,13 +1918,15 @@ button, a, .btn, .btn-text, .sk-play, .sk-wrap, .seat-card, .code, input, .bid-g
   font-weight: 700;
 }
 
-.flourish-banner {
+.flourish-overlay {
   position: absolute;
-  left: 50%;
-  top: 38%;
-  transform: translate(-50%, -50%);
-  z-index: 16;
+  inset: 0;
+  z-index: 22;
+  display: grid;
+  place-items: center;
   pointer-events: none;
+}
+.flourish-banner {
   font-size: clamp(20px, 6.4cqw, 28px);
   font-weight: 800;
   letter-spacing: 0.04em;
@@ -1925,10 +1939,10 @@ button, a, .btn, .btn-text, .sk-play, .sk-wrap, .seat-card, .code, input, .bid-g
   animation: flourish-pop 1.05s ease-out both;
 }
 @keyframes flourish-pop {
-  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.72) translateY(10px); }
-  14% { opacity: 1; transform: translate(-50%, -50%) scale(1.06); }
-  70% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.98) translateY(-6px); }
+  0% { opacity: 0; transform: scale(0.72) translateY(10px); }
+  14% { opacity: 1; transform: scale(1.06); }
+  70% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.98) translateY(-6px); }
 }
 
 .seat-bidline.bid-reveal {
@@ -2338,9 +2352,11 @@ button, a, .btn, .btn-text, .sk-play, .sk-wrap, .seat-card, .code, input, .bid-g
   50% { box-shadow: 0 0 0 8px rgba(237, 191, 89, 0); }
 }
 .rotate-hint {
-  position: sticky;
+  position: absolute;
   top: 0;
-  z-index: 40;
+  left: 0;
+  right: 0;
+  z-index: 41;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2527,7 +2543,11 @@ body.dragging-card { cursor: grabbing; }
   .brand .en { font-size: 16px; }
   .home-card { padding: 16px 18px; }
 }
+@media (max-height: 700px) {
+  .table-screen { --dock-reserve: 184px; }
+}
 @media (max-height: 620px) {
+  .table-screen { --dock-reserve: 160px; }
   .brand-cover, .brand-cover img { width: min(88px, 24vw); max-height: min(16svh, 100px); }
   .brand h1 { font-size: 24px; }
   .home-hint { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
