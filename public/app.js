@@ -921,19 +921,23 @@ function lastTrickCueHTML(v) {
 }
 
 function seatRadii(n) {
-  if (n <= 2) return { rx: 0, ry: 38 };
-  if (n === 3) return { rx: 40, ry: 38 };
-  if (n === 4) return { rx: 42, ry: 39 };
-  if (n === 5) return { rx: 43, ry: 40 };
-  return { rx: 45, ry: 40 };
+  if (n <= 2) return { rx: 0, ry: 36 };
+  if (n === 3) return { rx: 36, ry: 37 };
+  if (n === 4) return { rx: 36, ry: 38 };
+  if (n === 5) return { rx: 38, ry: 39 };
+  return { rx: 40, ry: 39 };
 }
 
 function seatPlace(angleDeg) {
   const a = ((angleDeg % 360) + 360) % 360;
-  if (a >= 45 && a < 135) return "bottom";
-  if (a >= 135 && a < 225) return "left";
-  if (a >= 225 && a < 315) return "top";
-  return "right";
+  if (a >= 67.5 && a < 112.5) return "bottom";
+  if (a >= 112.5 && a < 157.5) return "bottom-left";
+  if (a >= 157.5 && a < 202.5) return "left";
+  if (a >= 202.5 && a < 247.5) return "top-left";
+  if (a >= 247.5 && a < 292.5) return "top";
+  if (a >= 292.5 && a < 337.5) return "top-right";
+  if (a >= 337.5 || a < 22.5) return "right";
+  return "bottom-right";
 }
 
 function ledSuitActive(v) {
@@ -2347,7 +2351,6 @@ function circleTableHTML(v) {
       <div class="table-felt felt-rich${suitClass}">${tableArrowsSVG()}${center}${flourishBannerHTML()}</div>
       ${seats}
     </div>
-    ${followSuitHintHTML(v)}
   </div>`;
 }
 
@@ -2621,7 +2624,7 @@ function renderTable() {
     ? `<div class="next-trick"><button class="btn btn-ghost" data-act="continue">下一墩</button></div>`
     : "";
 
-  const tablePrompt = tablePromptHTML(v, { bidding, alreadyBid }) + playWaitHTML(v);
+  const tablePrompt = tablePromptHTML(v, { bidding, alreadyBid });
   const confirmBar = confirmBarHTML(v);
   const ledClass = ledSuitActive(v);
 
@@ -2655,6 +2658,7 @@ function renderTable() {
       ${circleTableHTML(v)}
       <div class="table-dock">
         ${prevTrickButtonHTML(v)}
+        <div class="dock-status-row">${playWaitHTML(v)}${followSuitHintHTML(v)}</div>
         ${tablePrompt}
         ${skipTrick}
         <div class="error-line">${escapeHtml(state.error)}</div>

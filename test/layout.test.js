@@ -64,8 +64,8 @@ test("the table uses the full wrap and seats sit near the outer edge", () => {
   assert.match(table, /height:\s*100%/);
   assert.doesNotMatch(table, /aspect-ratio:\s*1\s*\/\s*1/);
   const fn = js.slice(js.indexOf("function seatRadii"), js.indexOf("function seatRadii") + 400);
-  assert.match(fn, /rx:\s*45/);
-  assert.match(fn, /ry:\s*40/);
+  assert.match(fn, /rx:\s*40/);
+  assert.match(fn, /ry:\s*39/);
 });
 
 test("played cards stay on the rim and cues stay off the felt", () => {
@@ -80,6 +80,13 @@ test("played cards stay on the rim and cues stay off the felt", () => {
   assert.match(js, /function midTrickCueHTML/);
   assert.match(css, /\.table-cues-row/);
   assert.match(css, /\.seat\.place-top/);
+  assert.match(css, /\.seat\.place-bottom-left/);
+  assert.match(css, /\.seat\.place-top-right/);
+  const seat = block(css, ".seat");
+  assert.match(seat, /width:\s*0/);
+  assert.match(js, /function seatPlace/);
+  assert.match(js, /bottom-left/);
+  assert.match(js, /dock-status-row/);
 });
 
 test("the bulky follow-suit banner is gone; a corner hint and led-suit tint remain", () => {
