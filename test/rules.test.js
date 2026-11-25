@@ -7,10 +7,12 @@ import {
   legalCards,
   ledSuit,
   winnerIndex,
+  resolveTrick,
   bonusPoints,
   scoreRound,
   standardDeck,
   isLegal,
+  activeBeast,
 } from "../server/rules.js";
 
 const Y = "yellow",
@@ -21,7 +23,9 @@ const ESC = "escape",
   PIR = "pirate",
   MER = "mermaid",
   TIG = "tigress",
-  SK = "skullKing";
+  SK = "skullKing",
+  KRA = "kraken",
+  WH = "whiteWhale";
 
 function hasCard(list, card) {
   return list.some((c) => {
@@ -163,15 +167,18 @@ test("scoring examples from rulebook", () => {
   assert.deepEqual(scoreRound(1, 1, 4, 40), { bidPoints: 20, bonus: 40, total: 60 });
 });
 
-test("basic deck has 70 cards", () => {
+test("basic deck has 72 cards including 八爪魚 and 白鯨, no loot", () => {
   const deck = standardDeck();
-  assert.equal(deck.length, 70);
+  assert.equal(deck.length, 72);
   assert.equal(deck.filter((c) => c.suit).length, 56);
   assert.equal(deck.filter((c) => c.special === "escape").length, 5);
   assert.equal(deck.filter((c) => c.special === "pirate").length, 5);
   assert.equal(deck.filter((c) => c.special === "mermaid").length, 2);
   assert.equal(deck.filter((c) => c.special === "tigress").length, 1);
   assert.equal(deck.filter((c) => c.special === "skullKing").length, 1);
+  assert.equal(deck.filter((c) => c.special === "kraken").length, 1);
+  assert.equal(deck.filter((c) => c.special === "whiteWhale").length, 1);
+  assert.equal(deck.filter((c) => c.special === "loot").length, 0);
 });
 
 test("isLegal agrees with legalCards", () => {
@@ -188,6 +195,8 @@ test("character lead: no led suit even after a numbered card is played", () => {
     P(0, special(MER, 0)),
     P(0, special(SK)),
     P(0, special(TIG), true),
+    P(0, special(KRA)),
+    P(0, special(WH)),
   ]) {
     const trick = [lead, P(1, suit(Y, 9))];
     assert.equal(ledSuit(trick), null);
@@ -201,4 +210,139 @@ test("escape / tigress-as-escape lead: first numbered card sets the suit", () =>
   assert.equal(ledSuit(trick), Y);
   assert.ok(!hasCard(legalCards(hand, trick), suit(G, 14)));
   assert.ok(hasCard(legalCards(hand, trick), suit(Y, 5)));
+});
+
+test("八爪魚 and 白鯨 are always legal and do not follow suit", () => {
+  const hand = [suit(Y, 5), suit(G, 14), special(KRA), special(WH)];
+  const trick = [P(0, suit(Y, 12))];
+  const leg = legalCards(hand, trick);
+  assert.ok(hasCard(leg, special(KRA)));
+  assert.ok(hasCard(leg, special(WH)));
+  assert.ok(hasCard(leg, suit(Y, 5)));
+  assert.ok(!hasCard(leg, suit(G, 14)));
+});
+
+test("mid-trick 白鯨 still requires following an already established suit", () => {
+  const hand = [suit(Y, 5), suit(G, 14), special(PIR, 0)];
+  const trick = [P(0, suit(Y, 12)), P(1, special(WH))];
+  assert.equal(ledSuit(trick), Y);
+  const leg = legalCards(hand, trick);
+  assert.ok(hasCard(leg, suit(Y, 5)));
+  assert.ok(hasCard(leg, special(PIR, 0)));
+  assert.ok(!hasCard(leg, suit(G, 14)));
+});
+
+test("escape lead then 白鯨 then a number: that number sets the suit", () => {
+  const hand = [suit(Y, 5), suit(G, 14)];
+  const trick = [P(0, special(ESC, 0)), P(1, special(WH)), P(2, suit(Y, 3))];
+  assert.equal(ledSuit(trick), Y);
+  assert.ok(!hasCard(legalCards(hand, trick), suit(G, 14)));
+});
+
+test("八爪魚 destroys the trick; next leader is who would have won without it", () => {
+  const t = [P(0, suit(Y, 12)), P(1, suit(B, 3)), P(2, special(KRA))];
+  const r = resolveTrick(t);
+  assert.equal(r.destroyed, true);
+  assert.equal(r.winnerPlayerIndex, null);
+  assert.equal(r.effect, "kraken");
+  assert.equal(r.nextLeaderIndex, 1); // black 3 would trump yellow 12
+  assert.equal(winnerIndex(t), null);
+  assert.equal(bonusPts(t, r.winnerPlayerIndex), 0);
+});
+
+test("八爪魚 lead: next leader is who would have won had it not been led", () => {
+  const t = [P(0, special(KRA)), P(1, suit(Y, 12)), P(2, special(PIR, 0))];
+  const r = resolveTrick(t);
+  assert.equal(r.destroyed, true);
+  assert.equal(r.nextLeaderIndex, 2); // pirate would beat yellow 12
+});
+
+test("白鯨: highest rank wins regardless of trump or suit; tie goes to first played", () => {
+  const t = [P(0, suit(Y, 12)), P(1, suit(B, 3)), P(2, special(WH))];
+  const r = resolveTrick(t);
+  assert.equal(r.destroyed, false);
+  assert.equal(r.effect, "whiteWhale");
+  assert.equal(r.winnerPlayerIndex, 0); // 12 > 3, black does not trump
+  assert.equal(r.nextLeaderIndex, 0);
+});
+
+test("白鯨: equal highest rank, first of those played wins", () => {
+  const t = [P(0, suit(Y, 10)), P(1, suit(B, 14)), P(2, suit(G, 14)), P(3, special(WH))];
+  const r = resolveTrick(t);
+  assert.equal(r.winnerPlayerIndex, 1); // black 14 before green 14
+});
+
+test("白鯨: specials cannot win; a later high number beats earlier characters", () => {
+  const t = [P(0, special(SK)), P(1, special(PIR, 0)), P(2, suit(G, 2)), P(3, special(WH))];
+  const r = resolveTrick(t);
+  assert.equal(r.winnerPlayerIndex, 2);
+  assert.equal(bonusPts(t, 2), 0);
+});
+
+test("白鯨 with only specials: discarded, whale player leads next", () => {
+  const t = [P(0, special(PIR, 0)), P(1, special(MER, 0)), P(2, special(WH)), P(3, special(ESC, 0))];
+  const r = resolveTrick(t);
+  assert.equal(r.destroyed, true);
+  assert.equal(r.winnerPlayerIndex, null);
+  assert.equal(r.effect, "whiteWhale");
+  assert.equal(r.nextLeaderIndex, 2);
+  assert.equal(bonusPts(t, null), 0);
+});
+
+test("白鯨 lead then only specials: whale player still leads next", () => {
+  const t = [P(0, special(WH)), P(1, special(SK)), P(2, special(TIG), true)];
+  const r = resolveTrick(t);
+  assert.equal(r.destroyed, true);
+  assert.equal(r.nextLeaderIndex, 0);
+});
+
+test("both beasts: second keeps power; 白鯨 second, first 八爪魚 acts as escape", () => {
+  const t = [P(0, suit(Y, 12)), P(1, suit(B, 3)), P(2, special(KRA)), P(3, special(WH))];
+  assert.equal(activeBeast(t).card.special, WH);
+  const r = resolveTrick(t);
+  assert.equal(r.destroyed, false);
+  assert.equal(r.effect, "whiteWhale");
+  assert.equal(r.winnerPlayerIndex, 0); // 12 > 3
+});
+
+test("both beasts: official FAQ, 白鯨 then 八爪魚 — no winner, black 3 would have won", () => {
+  const t = [P(0, suit(Y, 12)), P(1, suit(B, 3)), P(2, special(WH)), P(3, special(KRA))];
+  assert.equal(activeBeast(t).card.special, KRA);
+  const r = resolveTrick(t);
+  assert.equal(r.destroyed, true);
+  assert.equal(r.effect, "kraken");
+  assert.equal(r.winnerPlayerIndex, null);
+  assert.equal(r.nextLeaderIndex, 1);
+});
+
+test("both beasts with only specials and 白鯨 second: discarded, whale player leads", () => {
+  const t = [P(0, special(PIR, 0)), P(1, special(KRA)), P(2, special(WH))];
+  const r = resolveTrick(t);
+  assert.equal(r.effect, "whiteWhale");
+  assert.equal(r.destroyed, true);
+  assert.equal(r.nextLeaderIndex, 2);
+});
+
+test("14 bonuses still apply when a number wins under 白鯨; no character-capture bonus", () => {
+  const t = [P(0, suit(Y, 14)), P(1, special(PIR, 0)), P(2, special(MER, 0)), P(3, special(WH))];
+  const r = resolveTrick(t);
+  assert.equal(r.winnerPlayerIndex, 0);
+  const { points, details } = bonusPoints(t, 0);
+  assert.equal(points, 10);
+  assert.ok(details.some((d) => d.includes("寶藏箱 14")));
+  assert.ok(!details.some((d) => d.includes("捕獲")));
+});
+
+test("black 14 + colour 14 bonuses both go to the 白鯨 number winner", () => {
+  const t = [P(0, suit(Y, 14)), P(1, suit(B, 14)), P(2, special(WH))];
+  const r = resolveTrick(t);
+  assert.equal(r.winnerPlayerIndex, 0); // tie at 14, first played
+  assert.equal(bonusPts(t, 0), 10 + 20);
+});
+
+test("destroyed trick awards no 14 bonus even if a 14 was played", () => {
+  const t = [P(0, suit(Y, 14)), P(1, special(KRA))];
+  const r = resolveTrick(t);
+  assert.equal(r.destroyed, true);
+  assert.equal(bonusPts(t, r.winnerPlayerIndex), 0);
 });

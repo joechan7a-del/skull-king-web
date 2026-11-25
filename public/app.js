@@ -377,7 +377,7 @@ function renderHome() {
       </div>
       <div>
         <button class="btn-text" data-act="rules">遊戲規則</button>
-        <div class="footer-note">基本規則 · 10 局 · 暫時唔包括 Kraken、白鯨同贓物牌</div>
+        <div class="footer-note">基本規則 · 八爪魚同白鯨 · 10 局 · 暫時唔包括贓物牌</div>
         ${location.hostname === "localhost" || location.hostname === "127.0.0.1" ? lan : ""}
       </div>
     </div>
@@ -514,16 +514,17 @@ function renderTable() {
     .join("");
 
   const trickCards = v.trick || [];
+  const destroyed = v.phase === "trickResult" && v.lastTrickDestroyed;
   const trick = trickCards.length
-    ? `<div class="trick-row">${trickCards
+    ? `<div class="trick-area-inner ${destroyed ? "destroyed" : ""}"><div class="trick-row">${trickCards
         .map((p) => {
-          const win = v.phase === "trickResult" && p.playerIndex === v.lastWinnerIndex;
+          const win = v.phase === "trickResult" && !destroyed && p.playerIndex === v.lastWinnerIndex;
           return `<div class="trick-item ${win ? "winner" : ""}">
             ${cardFaceHTML(p.card, { tigressAsPirate: p.tigressAsPirate, compact: trickCards.length > 4 })}
             <div class="who">${escapeHtml(p.playerName || "")}${win ? " · 贏" : ""}</div>
           </div>`;
         })
-        .join("")}</div>`
+        .join("")}</div>${destroyed ? `<div class="trick-void">呢墩作廢，無人贏</div>` : ""}</div>`
     : `<div class="trick-empty">呢墩尚未出牌</div>`;
 
   let bidPanel = "";
@@ -673,14 +674,17 @@ function renderRules() {
         <h3 style="color:var(--gold)">點玩</h3>
         <p>一共 10 局。第 1 局每人 1 張，之後每局多一張，第 10 局各 10 張。睇完手牌之後，大家一齊叫會贏幾墩（其他人嘅叫牌要等齊先睇到）。估中先有分，估錯就扣分。</p>
         <h3 style="color:var(--gold)">出牌</h3>
-        <p>第一張有花色嘅牌決定呢墩要跟嘅花。如果你出數字牌，有嗰種花就要跟。逃脫、海盜、人魚、母老虎同骷髏王隨時都可以出，唔使跟花。黑色骷髏旗係王牌，大過其他三種顏色嘅數字牌。</p>
-        <p>如果第一張係逃脫或「母老虎當逃脫」，之後第一張數字牌先定花。如果第一張係人魚、海盜、骷髏王或「母老虎當海盜」，呢墩就冇得跟花，各人可以出任何牌。</p>
+        <p>第一張有花色嘅牌決定呢墩要跟嘅花。如果你出數字牌，有嗰種花就要跟。逃脫、海盜、人魚、母老虎、骷髏王、八爪魚同白鯨隨時都可以出，唔使跟花。黑色骷髏旗係王牌，大過其他三種顏色嘅數字牌。</p>
+        <p>如果第一張係逃脫或「母老虎當逃脫」，之後第一張數字牌先定花。如果第一張係人魚、海盜、骷髏王、「母老虎當海盜」、八爪魚或白鯨，呢墩就冇得跟花，各人可以出任何牌。如果花色已經定咗，之後先出白鯨，之後出數字牌嘅人仍然要跟嗰個已定花色。</p>
         <h3 style="color:var(--gold)">誰贏呢墩</h3>
         <p>人魚可以捕獲骷髏王。骷髏王大過海盜。海盜大過人魚同所有數字牌。幾個海盜或者兩條人魚一齊出現，先出嗰張贏。如果人魚、海盜同骷髏王同時出現，一定係人魚贏，而且只計人魚捕骷髏王嘅獎勵。全部都係逃脫，就由先出嗰個人贏。出母老虎時要即時宣布當海盜定逃脫。</p>
+        <p>八爪魚會食咗整墩：無人贏、牌亦唔算被捕獲（冇捕獲獎勵）。下一墩由「如果冇出八爪魚會贏嗰個人」先出。</p>
+        <p>白鯨會令特殊牌全部作廢、唔可以贏墩；所有數字牌都唔再分花色同王牌，由點數最高嗰張贏（相同點數就由先出嗰張贏）。如果呢墩淨係特殊牌，就好似八爪魚咁作廢，下一墩由出白鯨嗰個人先出。數字牌喺白鯨之下贏墩，可以收埋呢墩嘅牌，亦可以計 14 嘅獎勵，但人魚、海盜、骷髏王嘅捕獲獎勵就唔計。</p>
+        <p>如果同一墩既有八爪魚又有白鯨，得第二張出嘅獸牌有效，第一張當逃脫。若八爪魚係後出，呢墩作廢，下一墩由「兩張獸牌都冇出過會贏嗰個人」先出。一局最後一墩如果作廢，就直接完局，無人贏嗰墩。因為有墩會被食咗，一局贏墩總數可以少過派牌張數；叫 0 仍然係按呢局張數加減 10 分。</p>
         <h3 style="color:var(--gold)">計分</h3>
         <p>叫 1 墩或以上而且估中：每墩 20 分。估錯：差幾墩就扣 10 分乘相差。叫 0 而且真係一墩都唔贏：10 分乘呢局張數；一旦贏咗墩，就要扣同樣分數。獎勵分只會喺估中叫牌時先計：普通 14 各 +10，黑色 14 +20（誰出都係贏墩嗰個人收）；海盜捕人魚每條 +20；骷髏王捕海盜每個 +30；人魚捕骷髏王 +40。</p>
         <h3 style="color:var(--gold)">呢個版本</h3>
-        <p>用 2021 年起 Grand Prix 基本規則。牌組 70 張：黃寶藏箱、綠鸚鵡、紫海盜地圖、黑骷髏旗各 1–14，再加 5 張逃脫、5 張海盜、2 條人魚、1 張母老虎同 1 張骷髏王。2 至 6 人，莊家輪流，莊家左邊先出第一墩。暫時唔包括擴充牌：Kraken、白鯨同贓物牌。</p>
+        <p>用 2021 年起 Grand Prix 規則，包括八爪魚同白鯨。牌組 72 張：黃寶藏箱、綠鸚鵡、紫海盜地圖、黑骷髏旗各 1–14，再加 5 張逃脫、5 張海盜、2 條人魚、1 張母老虎、1 張骷髏王、1 張八爪魚同 1 張白鯨。2 至 6 人，莊家輪流，莊家左邊先出第一墩。暫時唔包括贓物牌。</p>
       </div>
     </div>
   `;

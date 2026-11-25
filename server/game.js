@@ -4,7 +4,7 @@ import {
   sortHand,
   legalCards,
   playedCard,
-  winnerIndex,
+  resolveTrick,
   bonusPoints,
   scoreRound,
 } from "./rules.js";
@@ -39,6 +39,8 @@ export class Game {
     this.trick = [];
     this.lastTrick = [];
     this.lastWinnerIndex = null;
+    this.lastNextLeaderIndex = null;
+    this.lastTrickDestroyed = false;
     this.lastTrickDetails = [];
     this.pendingTigress = null;
     this.scores = [];
@@ -73,6 +75,8 @@ export class Game {
     this.trick = [];
     this.lastTrick = [];
     this.lastWinnerIndex = null;
+    this.lastNextLeaderIndex = null;
+    this.lastTrickDestroyed = false;
     this.lastTrickDetails = [];
     this.pendingTigress = null;
     this.phase = PHASE.BIDDING;
@@ -199,30 +203,45 @@ export class Game {
   }
 
   _resolveTrick() {
-    const winner = winnerIndex(this.trick);
-    const bonus = bonusPoints(this.trick, winner);
-    this.players[winner].tricksWon += 1;
-    this.players[winner].potentialBonus += bonus.points;
-    this.players[winner].bonusDetails.push(...bonus.details);
-    this.lastWinnerIndex = winner;
+    const result = resolveTrick(this.trick);
     this.lastTrick = this.trick;
-    this.lastTrickDetails = bonus.details;
+    this.lastTrickDestroyed = result.destroyed;
+    this.lastWinnerIndex = result.winnerPlayerIndex;
+    this.lastNextLeaderIndex = result.nextLeaderIndex;
+    this.lastTrickDetails = [];
+    const lastOfRound = this.players.every((p) => p.hand.length === 0);
+    const leader = this.players[result.nextLeaderIndex];
+
+    if (result.destroyed) {
+      const beast = result.effect === "whiteWhale" ? "白鯨令呢墩作廢" : "八爪魚食咗呢墩";
+      this.statusMessage = lastOfRound
+        ? `${beast}，無人贏墩。呢局完。`
+        : `${beast}，無人贏墩。下一墩由${leader.name}先出。`;
+    } else {
+      const bonus = bonusPoints(this.trick, result.winnerPlayerIndex);
+      const winner = this.players[result.winnerPlayerIndex];
+      winner.tricksWon += 1;
+      winner.potentialBonus += bonus.points;
+      winner.bonusDetails.push(...bonus.details);
+      this.lastTrickDetails = bonus.details;
+      const extra = bonus.details.length ? "（" + bonus.details.join("，") + "）" : "";
+      const whale = result.effect === "whiteWhale" ? "白鯨令最高數字贏，" : "";
+      this.statusMessage = `${whale}${winner.name}贏咗呢墩。` + extra;
+    }
     this.trick = [];
     this.phase = PHASE.TRICK_RESULT;
-    const extra = bonus.details.length ? "（" + bonus.details.join("，") + "）" : "";
-    this.statusMessage = `${this.players[winner].name}贏咗呢墩。` + extra;
     this.revision++;
   }
 
   advanceTrickResult() {
     if (this.phase !== PHASE.TRICK_RESULT) return { error: "而家唔係墩結果。" };
-    const winner = this.lastWinnerIndex ?? this.currentPlayerIndex;
+    const leader = this.lastNextLeaderIndex ?? this.lastWinnerIndex ?? this.currentPlayerIndex;
     if (this.players.every((p) => p.hand.length === 0)) {
       this._finalizeRound();
     } else {
-      this.currentPlayerIndex = winner;
+      this.currentPlayerIndex = leader;
       this.phase = PHASE.PLAYING;
-      this.statusMessage = `${this.players[winner].name}出下一墩。`;
+      this.statusMessage = `${this.players[leader].name}出下一墩。`;
       this.revision++;
     }
     return { ok: true };
@@ -323,6 +342,8 @@ export class Game {
       revision: this.revision,
       bidsRevealed: revealed,
       lastWinnerIndex: this.phase === PHASE.TRICK_RESULT ? this.lastWinnerIndex : null,
+      lastNextLeaderIndex: this.phase === PHASE.TRICK_RESULT ? this.lastNextLeaderIndex : null,
+      lastTrickDestroyed: this.phase === PHASE.TRICK_RESULT ? this.lastTrickDestroyed : false,
       lastTrickDetails: this.phase === PHASE.TRICK_RESULT ? this.lastTrickDetails : [],
       pendingTigress: !!(
         this.phase === PHASE.CHOOSING_TIGRESS &&

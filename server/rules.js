@@ -1,4 +1,4 @@
-/** Skull King 2021+ Grand Prix basic-rules engine (no expansion cards). */
+/** Skull King 2021+ Grand Prix rules, including 八爪魚 and 白鯨 (no Loot cards). */
 
 export const SUITS = ["yellow", "green", "purple", "black"];
 
@@ -9,7 +9,7 @@ export const SUIT_INFO = {
   black: { chineseName: "骷髏旗", shortName: "黑", trump: true },
 };
 
-export const SPECIALS = ["escape", "pirate", "mermaid", "tigress", "skullKing"];
+export const SPECIALS = ["escape", "pirate", "mermaid", "tigress", "skullKing", "kraken", "whiteWhale"];
 
 export const SPECIAL_INFO = {
   escape: { chineseName: "逃脫", count: 5 },
@@ -17,9 +17,19 @@ export const SPECIAL_INFO = {
   mermaid: { chineseName: "人魚", count: 2 },
   tigress: { chineseName: "母老虎", count: 1 },
   skullKing: { chineseName: "骷髏王", count: 1 },
+  kraken: { chineseName: "八爪魚", count: 1 },
+  whiteWhale: { chineseName: "白鯨", count: 1 },
 };
 
-const SPECIAL_HAND_ORDER = ["skullKing", "tigress", "pirate", "mermaid", "escape"];
+const SPECIAL_HAND_ORDER = [
+  "skullKing",
+  "tigress",
+  "pirate",
+  "mermaid",
+  "kraken",
+  "whiteWhale",
+  "escape",
+];
 const SUIT_HAND_ORDER = ["black", "purple", "green", "yellow"];
 
 export function makeSuit(suit, rank, id = `${suit}-${rank}`) {
@@ -76,6 +86,8 @@ export function standardDeck() {
   for (let i = 0; i < 2; i++) cards.push(makeSpecial("mermaid", i));
   cards.push(makeSpecial("tigress"));
   cards.push(makeSpecial("skullKing"));
+  cards.push(makeSpecial("kraken"));
+  cards.push(makeSpecial("whiteWhale"));
   return cards;
 }
 
@@ -135,23 +147,49 @@ export function isSkullKing(played) {
   return played.card.special === "skullKing";
 }
 
+export function isKraken(played) {
+  return played.card.special === "kraken";
+}
+
+export function isWhiteWhale(played) {
+  return played.card.special === "whiteWhale";
+}
+
+export function isBeast(played) {
+  return isKraken(played) || isWhiteWhale(played);
+}
+
 export function isSuitCard(played) {
   return played.card.suit != null;
 }
 
+/**
+ * The second 八爪魚/白鯨 played keeps its power; the first acts as an escape.
+ * If only one is present, that card's effect applies.
+ */
+export function activeBeast(trick) {
+  const beasts = trick.filter(isBeast);
+  if (!beasts.length) return null;
+  return beasts[beasts.length - 1];
+}
+
 export function ledSuit(trick) {
   if (!trick.length) return null;
-  // Character lead (mermaid / pirate / Skull King / Tigress-as-pirate): no suit all trick.
+  // Character / beast lead (mermaid, pirate, Skull King, Tigress-as-pirate,
+  // 八爪魚, 白鯨): no suit all trick, even if a number is played later.
   const lead = trick[0];
   const leadEff = effectiveSpecial(lead);
   if (
     leadEff === "pirate" ||
     lead.card.special === "mermaid" ||
-    lead.card.special === "skullKing"
+    lead.card.special === "skullKing" ||
+    lead.card.special === "kraken" ||
+    lead.card.special === "whiteWhale"
   ) {
     return null;
   }
   // Suit lead, or escape / Tigress-as-escape lead: first numbered card sets the suit.
+  // A mid-trick 白鯨 does not clear an already established suit.
   const first = trick.find(isSuitCard);
   return first ? first.card.suit : null;
 }
@@ -169,8 +207,7 @@ export function isLegal(card, hand, trick) {
   return legalCards(hand, trick).some((c) => c.id === card.id || sameCard(c, card));
 }
 
-/** Winning player's seat index (playerIndex on the played cards). */
-export function winnerIndex(trick) {
+function standardWinnerIndex(trick) {
   if (!trick.length) throw new Error("empty trick");
   const mermaids = [];
   const kings = [];
@@ -214,13 +251,86 @@ export function winnerIndex(trick) {
   return trick[0].playerIndex;
 }
 
+/** Who would have won if the listed specials were never played. */
+function winnerWithoutSpecials(trick, specialsToIgnore) {
+  const remaining = trick.filter((p) => !specialsToIgnore.includes(p.card.special));
+  if (!remaining.length) return trick[0].playerIndex;
+  return standardWinnerIndex(remaining);
+}
+
+function whiteWhaleOutcome(trick, whalePlay) {
+  const numbers = trick.filter(isSuitCard);
+  if (!numbers.length) {
+    return {
+      destroyed: true,
+      winnerPlayerIndex: null,
+      nextLeaderIndex: whalePlay.playerIndex,
+      effect: "whiteWhale",
+    };
+  }
+  let best = numbers[0];
+  for (let i = 1; i < numbers.length; i++) {
+    if (numbers[i].card.rank > best.card.rank) best = numbers[i];
+  }
+  return {
+    destroyed: false,
+    winnerPlayerIndex: best.playerIndex,
+    nextLeaderIndex: best.playerIndex,
+    effect: "whiteWhale",
+  };
+}
+
+/**
+ * Resolve a completed trick, including 八爪魚 / 白鯨 effects.
+ * winnerPlayerIndex is null when the trick is destroyed (no one captures it).
+ * nextLeaderIndex is who leads the next trick (or would, if this is the last).
+ */
+export function resolveTrick(trick) {
+  if (!trick.length) throw new Error("empty trick");
+  const beast = activeBeast(trick);
+  if (!beast) {
+    const winner = standardWinnerIndex(trick);
+    return {
+      destroyed: false,
+      winnerPlayerIndex: winner,
+      nextLeaderIndex: winner,
+      effect: null,
+    };
+  }
+
+  if (beast.card.special === "kraken") {
+    const both = trick.some(isKraken) && trick.some(isWhiteWhale);
+    const ignore = both ? ["kraken", "whiteWhale"] : ["kraken"];
+    return {
+      destroyed: true,
+      winnerPlayerIndex: null,
+      nextLeaderIndex: winnerWithoutSpecials(trick, ignore),
+      effect: "kraken",
+    };
+  }
+
+  return whiteWhaleOutcome(trick, beast);
+}
+
+/**
+ * Capturing player's seat index, or null if the trick is destroyed.
+ */
+export function winnerIndex(trick) {
+  return resolveTrick(trick).winnerPlayerIndex;
+}
+
 /**
  * Potential bonuses for the winner of this trick.
  * Awarded only later if that player makes their bid.
+ * Character-capture bonuses apply only when a character actually won;
+ * under 白鯨 a numbered card wins, so those bonuses do not apply.
+ * Standard 14 bonuses still apply whenever the trick is captured.
  */
 export function bonusPoints(trick, winnerPlayerIndex) {
   let points = 0;
   const details = [];
+
+  if (winnerPlayerIndex == null) return { points, details };
 
   for (const played of trick) {
     if (played.card.rank === 14 && played.card.suit) {

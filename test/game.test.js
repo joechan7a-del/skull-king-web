@@ -247,3 +247,118 @@ test("winnerIndex used by game matches mermaid-over-SK-with-pirate", () => {
   ];
   assert.equal(winnerIndex(t), 2);
 });
+
+test("八爪魚 destroys a trick: no capture, next leader is the hypothetical winner", () => {
+  const g = new Game(seats(2, 0));
+  g.start();
+  g.round = 2;
+  g.players[0].hand = [makeSuit("yellow", 12), makeSuit("green", 5)];
+  g.players[1].hand = [makeSpecial("kraken"), makeSuit("green", 10)];
+  g.players[0].bid = 0;
+  g.players[1].bid = 1;
+  g.phase = PHASE.PLAYING;
+  g.currentPlayerIndex = 0;
+  g.playCard("h0", "yellow-12");
+  g.playCard("h1", "kraken");
+  assert.equal(g.phase, PHASE.TRICK_RESULT);
+  assert.equal(g.lastTrickDestroyed, true);
+  assert.equal(g.lastWinnerIndex, null);
+  assert.equal(g.lastNextLeaderIndex, 0);
+  assert.equal(g.players[0].tricksWon, 0);
+  assert.equal(g.players[1].tricksWon, 0);
+  assert.equal(g.players[0].potentialBonus, 0);
+  g.advanceTrickResult();
+  assert.equal(g.phase, PHASE.PLAYING);
+  assert.equal(g.currentPlayerIndex, 0);
+  g.playCard("h0", "green-5");
+  g.playCard("h1", "green-10");
+  assert.equal(g.lastTrickDestroyed, false);
+  assert.equal(g.lastWinnerIndex, 1);
+  assert.equal(g.players[1].tricksWon, 1);
+  g.advanceTrickResult();
+  assert.equal(g.phase, PHASE.ROUND_RESULT);
+  const rows = g.scores[0].rows;
+  assert.equal(rows[0].taken, 0);
+  assert.equal(rows[1].taken, 1);
+  assert.equal(rows[0].taken + rows[1].taken, 1); // less than 2 cards dealt
+  assert.equal(rows[0].bidPoints, 20); // 0-bid made: 10 * 2 cards dealt
+  assert.equal(rows[1].bidPoints, 20);
+});
+
+test("destroyed last trick of a round ends the round with no winner for that trick", () => {
+  const g = new Game(seats(2, 0));
+  g.start();
+  g.round = 2;
+  g.players[0].hand = [makeSuit("yellow", 2), makeSpecial("kraken")];
+  g.players[1].hand = [makeSuit("yellow", 9), makeSuit("green", 3)];
+  g.players[0].bid = 0;
+  g.players[1].bid = 1;
+  g.phase = PHASE.PLAYING;
+  g.currentPlayerIndex = 1;
+  g.playCard("h1", "yellow-9");
+  g.playCard("h0", "yellow-2");
+  assert.equal(g.lastWinnerIndex, 1);
+  g.advanceTrickResult();
+  assert.equal(g.currentPlayerIndex, 1);
+  g.playCard("h1", "green-3");
+  g.playCard("h0", "kraken");
+  assert.equal(g.lastTrickDestroyed, true);
+  assert.equal(g.lastWinnerIndex, null);
+  assert.ok(g.statusMessage.includes("呢局完"));
+  g.advanceTrickResult();
+  assert.equal(g.phase, PHASE.ROUND_RESULT);
+  const rows = g.scores[0].rows;
+  assert.equal(rows[0].taken, 0);
+  assert.equal(rows[1].taken, 1);
+  assert.equal(rows[0].bidPoints, 20);
+  assert.equal(rows[1].bidPoints, 20);
+});
+
+test("白鯨 number win awards 14 bonus and no character-capture bonus in the game", () => {
+  const g = new Game(seats(3, 0));
+  g.start();
+  g.round = 1;
+  g.players[0].hand = [makeSuit("yellow", 14)];
+  g.players[1].hand = [makeSpecial("pirate", 0)];
+  g.players[2].hand = [makeSpecial("whiteWhale")];
+  g.players[0].bid = 1;
+  g.players[1].bid = 1;
+  g.players[2].bid = 0;
+  g.phase = PHASE.PLAYING;
+  g.currentPlayerIndex = 0;
+  g.playCard("h0", "yellow-14");
+  g.playCard("h1", "pirate-0");
+  g.playCard("h2", "whiteWhale");
+  assert.equal(g.lastTrickDestroyed, false);
+  assert.equal(g.lastWinnerIndex, 0);
+  assert.equal(g.players[0].tricksWon, 1);
+  assert.equal(g.players[0].potentialBonus, 10);
+  assert.ok(g.players[0].bonusDetails.some((d) => d.includes("寶藏箱 14")));
+  g.advanceTrickResult();
+  assert.equal(g.phase, PHASE.ROUND_RESULT);
+  assert.equal(g.scores[0].rows[0].bonus, 10);
+  assert.equal(g.scores[0].rows[0].bidPoints, 20);
+});
+
+test("0-bid scoring uses cards dealt even when a trick was destroyed", () => {
+  const g = new Game(seats(2, 0));
+  g.start();
+  g.round = 3;
+  g.players[0].hand = [];
+  g.players[1].hand = [];
+  g.players[0].bid = 0;
+  g.players[1].bid = 1;
+  g.players[0].tricksWon = 0;
+  g.players[1].tricksWon = 1; // 2 of 3 tricks were destroyed
+  g.players[0].potentialBonus = 0;
+  g.players[1].potentialBonus = 0;
+  g.phase = PHASE.TRICK_RESULT;
+  g.lastWinnerIndex = null;
+  g.lastTrickDestroyed = true;
+  g.lastNextLeaderIndex = 0;
+  g.advanceTrickResult();
+  const rows = g.scores[0].rows;
+  assert.equal(rows[0].bidPoints, 30); // 0 bid made, 10 * 3
+  assert.equal(rows[1].bidPoints, 20);
+  assert.equal(rows[0].taken + rows[1].taken, 1);
+});

@@ -1,4 +1,4 @@
-import { playedCard, winnerIndex } from "./rules.js";
+import { playedCard, resolveTrick } from "./rules.js";
 
 export const AI_NAMES = ["安妮", "黑鬍子", "凱利", "摩根", "杰克"];
 
@@ -78,13 +78,15 @@ export function choosePlay({ hand, legal, trick, bid, taken, myIndex, playerCoun
 
 export function wouldWin(card, tigressAsPirate, trick, myIndex) {
   const hypo = [...trick, playedCard(myIndex, card, tigressAsPirate)];
-  return winnerIndex(hypo) === myIndex;
+  return resolveTrick(hypo).winnerPlayerIndex === myIndex;
 }
 
 export function strength(card) {
   if (card.special === "skullKing") return 100;
   if (card.special === "pirate" || card.special === "tigress") return 90;
   if (card.special === "mermaid") return 80;
+  if (card.special === "kraken") return 8;
+  if (card.special === "whiteWhale") return 12;
   if (card.suit === "black") return 50 + card.rank;
   if (card.suit) return card.rank;
   return 0;
@@ -95,6 +97,7 @@ function trickExpectation(card, handSize) {
   if (card.special === "pirate" || card.special === "tigress") return 0.68;
   if (card.special === "mermaid") return 0.42;
   if (card.special === "escape") return 0;
+  if (card.special === "kraken" || card.special === "whiteWhale") return 0.05;
   if (card.suit === "black") return 0.1 + (card.rank / 14) * 0.82;
   if (card.rank === 14) return handSize <= 4 ? 0.4 : 0.28;
   if (card.rank >= 12) return handSize <= 3 ? 0.22 : 0.1;

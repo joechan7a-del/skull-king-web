@@ -431,6 +431,8 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   text-overflow: ellipsis;
 }
 .trick-item.winner .who { color: var(--gold); font-weight: 700; }
+.trick-area.destroyed .trick-item, .trick-area-inner.destroyed .trick-item { opacity: 0.78; }
+.trick-void { text-align: center; color: var(--gold-soft); font-size: 13px; font-weight: 700; margin-top: 6px; }
 
 .status {
   text-align: center;
@@ -531,6 +533,8 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
 .sk-card.special-mermaid .sk-card-inner { background: linear-gradient(180deg, #2d9aa6, #1b6b75); color: var(--gold-soft); }
 .sk-card.special-tigress .sk-card-inner { background: linear-gradient(180deg, #e8862a, #b85a10); color: var(--gold-soft); }
 .sk-card.special-skullKing .sk-card-inner { background: linear-gradient(180deg, #3a2450, #1c0e28); color: var(--gold-soft); border-color: rgba(237,191,89,0.85); }
+.sk-card.special-kraken .sk-card-inner { background: linear-gradient(180deg, #3a2860, #16102a); color: var(--gold-soft); border-color: rgba(180,140,220,0.7); }
+.sk-card.special-whiteWhale .sk-card-inner { background: linear-gradient(180deg, #e8eef4, #b7c6d4); color: var(--ink); border-color: rgba(80,110,140,0.45); }
 .sk-card.back .sk-card-inner {
   background: linear-gradient(135deg, #1a2d52, #0c1428);
   border-color: rgba(237,191,89,0.7);
