@@ -362,3 +362,35 @@ test("0-bid scoring uses cards dealt even when a trick was destroyed", () => {
   assert.equal(rows[1].bidPoints, 20);
   assert.equal(rows[0].taken + rows[1].taken, 1);
 });
+
+test("round result waits for all connected humans before advancing", () => {
+  const mgr = new RoomManager();
+  const { room, player: host } = mgr.createRoom({ name: "阿明" });
+  const joined = mgr.joinRoom({ code: room.code, name: "小芳" });
+  const guest = joined.player;
+  host.connected = true;
+  guest.connected = true;
+  mgr.setSeats(room, host.id, 2);
+  mgr.setAiFill(room, host.id, false);
+  mgr.setReady(room, guest.id, true);
+  const started = mgr.startGame(room, host.id);
+  assert.equal(started.ok, true);
+  const g = room.game;
+  for (const p of g.players) {
+    p.bid = 0;
+    p.tricksWon = 0;
+    p.potentialBonus = 0;
+    p.hand = [];
+  }
+  g.phase = PHASE.ROUND_RESULT;
+  const first = mgr.continueRound(room, host.id);
+  assert.equal(first.ok, true);
+  assert.equal(room.game.phase, PHASE.ROUND_RESULT);
+  assert.equal(room.game.round, 1);
+  const view = mgr.viewFor(room, guest.id);
+  assert.deepEqual(view.continueWaitingNames, ["小芳"]);
+  const second = mgr.continueRound(room, guest.id);
+  assert.equal(second.ok, true);
+  assert.equal(room.game.phase, PHASE.BIDDING);
+  assert.equal(room.game.round, 2);
+});

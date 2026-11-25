@@ -1,4 +1,4 @@
-import { cardFaceHTML, cardBackHTML, iconSVG, escapeHtml } from "./cards.js";
+import { cardFaceHTML, cardBackHTML, iconSVG, escapeHtml, CARD_HELP, SPECIAL_INFO, SUIT_INFO, cardHelpText, suitLabel } from "./cards.js";
 
 const TOKEN_KEY = "sk_token";
 const NAME_KEY = "sk_name";
@@ -14,7 +14,8 @@ const state = {
   view: null,
   name: localStorage.getItem(NAME_KEY) || "",
   joinCode: "",
-  bidValue: 0,
+  bidValue: null,
+  inspect: null,
   lastRound: 1,
   error: "",
   toast: "",
@@ -184,8 +185,8 @@ function onMessage(msg) {
     } else {
       state.screen = state.screen === "rules" ? "rules" : "play";
       if (state.screen !== "rules") state.rulesReturn = "play";
-      if (prevRound && msg.round !== prevRound) state.bidValue = 0;
-      if (msg.phase === "bidding" && state.bidValue > msg.cardsDealt) state.bidValue = 0;
+      if (prevRound && msg.round !== prevRound) state.bidValue = null;
+      if (msg.phase === "bidding" && state.bidValue != null && state.bidValue > msg.cardsDealt) state.bidValue = null;
     }
     render();
   }
@@ -253,11 +254,16 @@ function joinRoom(code) {
   });
 }
 
+function savedRoomCode() {
+  return pathCode() || localStorage.getItem(ROOM_KEY) || "";
+}
+
 function tryResume() {
-  const code = pathCode() || localStorage.getItem(ROOM_KEY) || "";
   if (pathCode()) state.joinCode = pathCode();
-  if (state.token && code) {
-    state.code = code;
+  // Opening a share link should drop you back into the room.
+  // On the home page, let the player choose to return, so they are not yanked into a mid-game session.
+  if (pathCode() && state.token) {
+    state.code = pathCode();
     connect({
       onOpen() {
         send({ type: "reconnect", token: state.token });
@@ -266,16 +272,48 @@ function tryResume() {
   }
 }
 
+function resumeSavedGame() {
+  const code = savedRoomCode();
+  if (!state.token || !code) {
+    setError("搵唔到之前嘅牌局。");
+    return;
+  }
+  state.code = code;
+  connect({
+    onOpen() {
+      send({ type: "reconnect", token: state.token });
+    },
+  });
+}
+
+function discardSavedGame() {
+  setToken("", "");
+  localStorage.removeItem(ROOM_KEY);
+  state.playerId = "";
+  state.error = "";
+  render();
+}
+
 // Event delegation
 app.addEventListener("click", (e) => {
   const t = e.target.closest("[data-act]");
   if (!t) return;
+  if (t.dataset.act === "close-inspect" && e.target.closest("[data-stop]")) return;
   const act = t.dataset.act;
   const view = state.view;
   if (act === "create") createRoom();
   else if (act === "join") joinRoom();
   else if (act === "rules") openRules();
   else if (act === "close-rules") closeRules();
+  else if (act === "resume") resumeSavedGame();
+  else if (act === "discard-session") discardSavedGame();
+  else if (act === "inspect") {
+    e.stopPropagation();
+    openInspect(t.dataset.id, t.dataset.why || "");
+    return;
+  }
+  else if (act === "close-inspect") { state.inspect = null; render(); return; }
+  else if (act === "card-legend") { state.inspect = { type: "legend" }; render(); return; }
   else if (act === "copy-code") copyText(state.code);
   else if (act === "copy-link") copyText(shareUrl(state.code));
   else if (act === "seats-inc") send({ type: "setSeats", count: (view?.seats || 4) + 1 });
@@ -292,9 +330,13 @@ app.addEventListener("click", (e) => {
     }
   }
   else if (act === "bid-pick") { state.bidValue = Number(t.dataset.n); render(); }
-  else if (act === "bid-submit") send({ type: "bid", value: state.bidValue });
+  else if (act === "bid-submit") {
+    if (state.bidValue == null) { setError("請先揀你叫幾多墩。"); return; }
+    send({ type: "bid", value: state.bidValue });
+  }
   else if (act === "play-card") {
     const id = t.dataset.id;
+    state.inspect = null;
     send({ type: "play", cardId: id });
   }
   else if (act === "tig-pirate") send({ type: "resolveTigress", asPirate: true });
@@ -317,7 +359,9 @@ app.addEventListener("input", (e) => {
 app.addEventListener("keydown", (e) => {
   if (e.key !== "Enter") return;
   if (e.target.id === "code-input") joinRoom();
-  else if (e.target.id === "name-input" && state.screen === "home") createRoom();
+  else if (e.target.id === "name-input" && state.screen === "home") {
+    if ((state.joinCode || pathCode()).trim()) joinRoom();
+  }
 });
 
 window.addEventListener("popstate", () => {
@@ -350,6 +394,91 @@ function toastHTML() {
   return state.toast ? `<div class="toast">${escapeHtml(state.toast)}</div>` : "";
 }
 
+
+function openInspect(cardId, why) {
+  const v = state.view;
+  if (!v) return;
+  let card = (v.myHand || []).find((c) => c.id === cardId);
+  let tigressAsPirate = null;
+  if (!card) {
+    const played = (v.trick || []).find((p) => p.card?.id === cardId);
+    if (played) {
+      card = played.card;
+      tigressAsPirate = played.tigressAsPirate;
+    }
+  }
+  if (!card) return;
+  const legal = new Set(v.legalCardIds || []);
+  state.inspect = {
+    type: "card",
+    card,
+    tigressAsPirate,
+    why: why || cardPlayWhy(card, v) || "",
+    canPlay: v.isMyTurn && v.phase === "playing" && legal.has(card.id),
+  };
+  render();
+}
+
+function cardPlayWhy(card, v) {
+  if (!v || !card) return "";
+  if (v.phase === "bidding") return "要先叫牌，叫完先輪到出牌。";
+  if (v.phase === "trickResult") return "等呢墩結果完咗，先出下一張。";
+  if (v.phase === "choosingTigress") return "請先揀母老虎當海盜定逃脫。";
+  if (v.phase !== "playing") return "";
+  const legal = new Set(v.legalCardIds || []);
+  if (legal.has(card.id)) return "";
+  if (!v.isMyTurn) {
+    const cur = (v.players || [])[v.currentPlayerIndex];
+    return `仲未到你出牌，而家輪到${cur?.name || "其他玩家"}。`;
+  }
+  if (v.ledSuit && SUIT_INFO[v.ledSuit]) {
+    return `而家要跟${suitLabel(v.ledSuit)}。你手上有呢種花，所以唔可以出其他顏色嘅數字牌；特殊牌就隨時可出。`;
+  }
+  return "呢張牌而家唔可以出。";
+}
+
+function bidHint(cardsDealt, value) {
+  if (value == null) return "睇完手牌先叫。叫 0 即係估一墩都唔贏。";
+  if (value === 0) return `叫 0：估一墩都唔贏。估中加 ${10 * cardsDealt} 分，一旦贏咗墩就要扣 ${10 * cardsDealt} 分。`;
+  return `叫 ${value} 墩：估中加 ${20 * value} 分；估錯就差幾墩，每差 1 墩扣 10 分。`;
+}
+
+function inspectHTML() {
+  const ins = state.inspect;
+  if (!ins) return "";
+  if (ins.type === "legend") {
+    const items = Object.entries(CARD_HELP)
+      .map(([key, text]) => {
+        const name = SPECIAL_INFO[key]?.chineseName || key;
+        return `<div class="legend-item"><strong>${escapeHtml(name)}</strong><p>${escapeHtml(text)}</p></div>`;
+      })
+      .join("");
+    return `<div class="overlay center" data-act="close-inspect">
+      <div class="sheet inspect-sheet" data-stop="1">
+        <h2>特殊牌係咩？</h2>
+        <p>特殊牌隨時可以出，唔使跟花。撳手牌右上角嘅「？」可以隨時再睇。</p>
+        <div class="legend-list">${items}</div>
+        <button class="btn btn-gold" data-act="close-inspect">知道喇</button>
+      </div>
+    </div>`;
+  }
+  const card = ins.card;
+  const help = cardHelpText(card, { tigressAsPirate: ins.tigressAsPirate });
+  const title = card.special
+    ? (SPECIAL_INFO[card.special]?.chineseName || "")
+    : `${SUIT_INFO[card.suit]?.chineseName || ""} ${card.rank}`;
+  return `<div class="overlay center" data-act="close-inspect">
+    <div class="sheet inspect-sheet" data-stop="1">
+      <div class="inspect-card">${cardFaceHTML(card, { tigressAsPirate: ins.tigressAsPirate })}</div>
+      <h2>${escapeHtml(title)}</h2>
+      <p>${escapeHtml(help)}</p>
+      ${ins.why ? `<p class="why-line">${escapeHtml(ins.why)}</p>` : ""}
+      ${ins.canPlay ? `<button class="btn btn-gold" data-act="play-card" data-id="${escapeHtml(card.id)}">出呢張</button><div style="height:10px"></div>` : ""}
+      <button class="btn ${ins.canPlay ? "btn-ghost" : "btn-gold"}" data-act="close-inspect">知道喇</button>
+    </div>
+  </div>`;
+}
+
 function renderHome() {
   const prefill = state.joinCode || pathCode();
   const lan = state.lanUrls.length
@@ -365,9 +494,15 @@ function renderHome() {
         <h1>骷髏王</h1>
         <div class="en">Skull King</div>
       </div>
+      ${state.token && savedRoomCode() && !pathCode() ? `
+        <div class="resume-bar">
+          <p>你仲有一場未完嘅牌局（房號 ${escapeHtml(savedRoomCode())}）。</p>
+          <button class="btn btn-gold" data-act="resume">返回牌局</button>
+          <button class="btn btn-ghost" data-act="discard-session">開始新遊戲</button>
+        </div>` : ""}
       <div class="home-card">
         <label class="field-label" for="name-input">你嘅名</label>
-        <input id="name-input" maxlength="12" placeholder="你" value="${escapeHtml(state.name)}" autocomplete="nickname" />
+        <input id="name-input" maxlength="12" placeholder="你（唔填就叫「你」）" value="${escapeHtml(state.name)}" autocomplete="nickname" />
         <div style="height:14px"></div>
         <button class="btn btn-gold" data-act="create">開房</button>
         <div class="or-row">或者加入</div>
@@ -375,6 +510,7 @@ function renderHome() {
           <input id="code-input" maxlength="6" placeholder="房號" value="${escapeHtml(prefill)}" autocapitalize="characters" autocomplete="off" />
           <button class="btn btn-ghost" data-act="join">加入</button>
         </div>
+        <p class="home-hint">開房之後把房號或連結傳俾朋友，佢哋輸入同一個號就可以一齊玩。第一次玩可以先睇遊戲規則。</p>
         <div class="error-line">${escapeHtml(state.error)}</div>
       </div>
       <div>
@@ -474,8 +610,15 @@ function renderLobby() {
       <div class="error-line">${escapeHtml(state.error)}</div>
       </div>
       <div class="lobby-actions">
-        ${!host ? `<button class="btn ${me?.ready ? "btn-ghost" : "btn-gold"}" data-act="ready" data-on="${me?.ready ? "1" : "0"}">${me?.ready ? "取消準備" : "準備好"}</button>` : ""}
-        ${host ? `<button class="btn btn-gold" data-act="start" ${canStart ? "" : "disabled"}>開始遊戲</button>` : `<div class="footer-note">等房主開始遊戲</div>`}
+        ${!host ? `<p class="start-hint">${me?.ready ? "你已準備好，等房主開始遊戲。" : "撳下面「準備好」，房主先開得局。"}</p>
+        <button class="btn ${me?.ready ? "btn-ghost" : "btn-gold"}" data-act="ready" data-on="${me?.ready ? "1" : "0"}">${me?.ready ? "取消準備" : "準備好"}</button>` : ""}
+        ${host ? `${!canStart ? `<p class="start-hint">${(() => {
+          const waiting = humans.filter((h) => !h.isHost && !h.ready).map((h) => h.name);
+          if (waiting.length) return `等 ${waiting.join("、")} 撳「準備好」先可以開始。`;
+          if (!v.aiFill && humans.length < 2) return "至少再等多一個人加入，或者開電腦補位。";
+          return "設定好人數就可以開始。";
+        })()}</p>` : `<p class="start-hint">人齊喇，可以開始。把房號傳俾未入嚟嘅朋友。</p>`}
+        <button class="btn btn-gold" data-act="start" ${canStart ? "" : "disabled"}>開始遊戲</button>` : ""}
       </div>
     </div>
     ${toastHTML()}
@@ -554,10 +697,10 @@ function circleTableHTML(v) {
     const win = v.phase === "trickResult" && !destroyed && playerIndex === v.lastWinnerIndex;
     const st = playerSeatStatus(p, v);
     const card = played
-      ? `<div class="seat-card ${win ? "winner" : ""} ${destroyed ? "voided" : ""}">
+      ? `<button class="seat-card ${win ? "winner" : ""} ${destroyed ? "voided" : ""}" data-act="inspect" data-id="${escapeHtml(played.card.id)}" aria-label="睇呢張牌">
            ${cardFaceHTML(played.card, { tigressAsPirate: played.tigressAsPirate, compact: true })}
            ${win ? `<div class="seat-win">贏</div>` : ""}
-         </div>`
+         </button>`
       : `<div class="seat-card empty"><div class="card-slot" aria-hidden="true"></div></div>`;
     return `<div class="seat ${thinking ? "thinking" : ""} ${isMe ? "is-me" : ""} ${win ? "winner" : ""} ${p.isAI ? "ai-seat" : ""}"
       style="left:${x.toFixed(2)}%;top:${y.toFixed(2)}%;--rot:${rot}deg;z-index:${thinking ? 6 : 2}">
@@ -602,10 +745,11 @@ function renderTable() {
       return `<button class="${on}" data-act="bid-pick" data-n="${i}">${i}</button>`;
     }).join("");
     bidPanel = `<div class="bid-panel">
-      <h3>${alreadyBid ? "已叫牌，等其他人" : "你叫幾多墩？"}</h3>
-      <p>${alreadyBid ? `你叫咗 ${myBid} 墩。` : `睇完手牌再叫，可以叫 0 到 ${n}。`}</p>
-      ${alreadyBid ? "" : `<div class="bid-grid">${btns}</div>
-        <button class="btn btn-gold" data-act="bid-submit">確定叫 ${state.bidValue} 墩</button>`}
+      <h3>${alreadyBid ? "已叫牌，等其他人" : "你估會贏幾墩？"}</h3>
+      <p>${alreadyBid ? `你叫咗 ${myBid} 墩。等其他人一齊叫完先揭曉。` : `睇完手牌先叫，可以叫 0 到 ${n}。其他人叫咩要等齊先睇到。`}</p>
+      ${alreadyBid ? "" : `<p class="bid-hint">${escapeHtml(bidHint(n, state.bidValue))}</p>
+        <div class="bid-grid">${btns}</div>
+        <button class="btn btn-gold" data-act="bid-submit" ${state.bidValue == null ? "disabled" : ""}>${state.bidValue == null ? "請先揀叫幾多墩" : `確定叫 ${state.bidValue} 墩`}</button>`}
     </div>`;
   }
 
@@ -617,17 +761,43 @@ function renderTable() {
     .map((c, i) => {
       const isLegal = canPlay && legal.has(c.id);
       const dim = canPlay && !legal.has(c.id);
+      const why = !isLegal ? cardPlayWhy(c, v) : "";
       const style = `style="margin-right:${i === handCards.length - 1 ? 0 : overlap}px;z-index:${i}"`;
       const inner = cardFaceHTML(c, { dimmed: dim });
+      const info = c.special
+        ? `<button class="card-info" data-act="inspect" data-id="${escapeHtml(c.id)}" aria-label="睇牌義">?</button>`
+        : "";
       if (isLegal) {
-        return `<button class="sk-wrap" data-act="play-card" data-id="${escapeHtml(c.id)}" ${style}>${inner.replace("sk-card ", "sk-card legal ")}</button>`;
+        return `<div class="sk-wrap" ${style}>
+          <button class="sk-play" data-act="play-card" data-id="${escapeHtml(c.id)}">${inner.replace("sk-card ", "sk-card legal ")}</button>
+          ${info}
+        </div>`;
       }
-      return `<div ${style}>${inner}</div>`;
+      return `<div class="sk-wrap inspect-only" ${style}>
+        <button class="sk-play" data-act="inspect" data-id="${escapeHtml(c.id)}" data-why="${escapeHtml(why)}">${inner}</button>
+        ${info}
+      </div>`;
     })
     .join("")}</div>`;
 
   const skipTrick = v.phase === "trickResult"
-    ? `<div style="text-align:center;margin-top:-4px"><button class="btn-text" data-act="continue">跳過動畫</button></div>`
+    ? `<div class="next-trick"><button class="btn btn-ghost" data-act="continue">下一墩</button></div>`
+    : "";
+
+  let turnBanner = "";
+  if (bidding && !alreadyBid) {
+    turnBanner = `<div class="turn-banner mine">輪到你叫牌。睇完手牌，估呢局會贏幾墩。</div>`;
+  } else if (v.phase === "playing" && v.isMyTurn) {
+    turnBanner = `<div class="turn-banner mine">輪到你出牌。${v.ledSuit ? `有${suitLabel(v.ledSuit)}就要跟，` : ""}特殊牌隨時可出。</div>`;
+  } else if (v.phase === "playing" || v.phase === "choosingTigress") {
+    const cur = (v.players || [])[v.currentPlayerIndex];
+    turnBanner = `<div class="turn-banner wait">等${escapeHtml(cur?.name || "對手")}出牌…</div>`;
+  } else if (v.phase === "trickResult") {
+    turnBanner = `<div class="turn-banner result">${escapeHtml(v.statusMessage || "")}</div>`;
+  }
+
+  const follow = v.followHint && (v.phase === "playing" || v.phase === "choosingTigress" || v.phase === "trickResult")
+    ? `<div class="follow-hint">${escapeHtml(v.followHint)}</div>`
     : "";
 
   return `
@@ -639,17 +809,23 @@ function renderTable() {
           <div class="round">第 ${v.round} 局／10</div>
           <div class="sub">各 ${v.cardsDealt} 張</div>
         </div>
-        <button class="btn-text" data-act="rules">規則</button>
+        <div class="header-actions">
+          <button class="btn-text" data-act="card-legend">牌義</button>
+          <button class="btn-text" data-act="rules">規則</button>
+        </div>
       </div>
       ${circleTableHTML(v)}
+      ${follow}
       <div class="status">${escapeHtml(v.statusMessage || "")}</div>
       ${skipTrick}
       <div class="error-line">${escapeHtml(state.error)}</div>
       ${bidPanel}
+      ${turnBanner}
       ${hand}
     </div>
     ${v.pendingTigress ? tigressHTML() : ""}
     ${v.phase === "roundResult" || v.phase === "gameOver" ? scoreHTML(v) : ""}
+    ${inspectHTML()}
     ${toastHTML()}
   `;
 }
@@ -667,13 +843,15 @@ function handOverlap(count) {
 function tigressHTML() {
   return `<div class="overlay center">
     <div class="sheet">
-      <h2>母老虎當咩出？</h2>
-      <p>當海盜就可以搶墩；當逃脫就盡量唔贏墩。</p>
-      <button class="btn btn-gold" data-act="tig-pirate">當海盜</button>
-      <div style="height:10px"></div>
-      <button class="btn btn-ink" data-act="tig-escape">當逃脫</button>
-      <div style="height:8px"></div>
-      <button class="btn-text" data-act="tig-cancel" style="width:100%;color:var(--ink-soft)">取消</button>
+      <h2>母老虎係咩？</h2>
+      <p>母老虎係一張要「變身」嘅特殊牌：出嚟嗰陣你要即場宣布佢當海盜定逃脫。佢本身冇第三種打法，亦唔使跟花。</p>
+      <div class="tig-choices">
+        <button class="btn btn-gold" data-act="tig-pirate">當海盜出</button>
+        <p class="tig-explain">同普通海盜一樣，可以搶墩；如果捕獲人魚（而且呢墩冇骷髏王），估中叫牌仲可以加分。</p>
+        <button class="btn btn-ink" data-act="tig-escape">當逃脫出</button>
+        <p class="tig-explain">同逃脫一樣，通常唔會贏墩。適合你已經贏夠，唔想再攞墩嘅時候。</p>
+      </div>
+      <button class="btn-text" data-act="tig-cancel" style="width:100%;color:var(--ink-soft)">取消，換第二張</button>
     </div>
   </div>`;
 }
@@ -681,16 +859,26 @@ function tigressHTML() {
 function scoreHTML(v) {
   const latest = v.scores?.[v.scores.length - 1];
   const over = v.phase === "gameOver";
+  const meRow = (latest?.rows || []).find((r) => r.playerId === v.yourId);
   const rows = (latest?.rows || [])
-    .map((r) => `<tr>
-      <td>${escapeHtml(r.playerName)}</td>
-      <td>${r.bid}／${r.taken}</td>
-      <td class="${r.bidPoints < 0 ? "neg" : r.bidPoints > 0 ? "pos" : ""}">${signed(r.bidPoints)}</td>
-      <td>${r.bonus === 0 ? "–" : "+" + r.bonus}</td>
-      <td class="${r.roundTotal < 0 ? "neg" : r.roundTotal > 0 ? "pos" : ""}">${signed(r.roundTotal)}</td>
-      <td><strong>${r.runningTotal}</strong></td>
-    </tr>`)
+    .map((r) => {
+      const made = r.bid === r.taken;
+      const mine = r.playerId === v.yourId;
+      return `<tr class="${mine ? "me" : ""}">
+        <td>${escapeHtml(r.playerName)}${mine ? "（你）" : ""}</td>
+        <td>${r.bid}／${r.taken}<span class="made-tag ${made ? "ok" : "bad"}">${made ? "估中" : "估錯"}</span></td>
+        <td class="${r.bidPoints < 0 ? "neg" : r.bidPoints > 0 ? "pos" : ""}">${signed(r.bidPoints)}</td>
+        <td>${r.bonus === 0 ? "–" : "+" + r.bonus}</td>
+        <td class="${r.roundTotal < 0 ? "neg" : r.roundTotal > 0 ? "pos" : ""}">${signed(r.roundTotal)}</td>
+        <td><strong>${r.runningTotal}</strong></td>
+      </tr>`;
+    })
     .join("");
+  let mineSummary = "";
+  if (meRow) {
+    const made = meRow.bid === meRow.taken;
+    mineSummary = `<p class="score-summary">你叫 ${meRow.bid} 贏 ${meRow.taken}，${made ? "估中" : "估錯"} ${signed(meRow.bidPoints)} 分${meRow.bonus ? `，獎勵 +${meRow.bonus}` : ""}，本局 ${signed(meRow.roundTotal)}，而家總分 ${meRow.runningTotal}。</p>`;
+  }
   const hostBtns = v.youAreHost
     ? `<div class="actions">
         <button class="btn btn-ink" data-act="back-lobby">返回大廳</button>
@@ -698,17 +886,33 @@ function scoreHTML(v) {
       </div>`
     : `<p>等房主決定再開一場定返回大廳。</p>`;
   const nextLabel = v.round >= 10 ? "睇總分" : "下一局";
+  const waiting = v.continueWaitingNames || [];
+  const needed = v.continueNeeded || [];
+  const ready = v.continueReady || [];
+  const meReady = ready.includes(v.yourId);
+  let continueBtn;
+  if (over) continueBtn = "";
+  else if (meReady && waiting.length) {
+    continueBtn = `<p class="start-hint">你已睇完（${ready.length}/${needed.length}），仲等 ${waiting.map(escapeHtml).join("、")}。</p>
+      <button class="btn btn-ghost" disabled>已睇完</button>`;
+  } else if (meReady) {
+    continueBtn = `<button class="btn btn-ghost" disabled>已睇完</button>`;
+  } else {
+    const waitNote = needed.length > 1 ? `<p class="start-hint">大家都睇完先會進入${v.round >= 10 ? "總分" : "下一局"}。</p>` : "";
+    continueBtn = `${waitNote}<button class="btn btn-gold" data-act="continue">${nextLabel}</button>`;
+  }
   return `<div class="overlay center">
     <div class="sheet">
       <h2>${over ? "最終分數" : `第 ${v.round} 局結果`}</h2>
       ${over ? `<p>${escapeHtml(v.statusMessage || "")}</p>` : ""}
+      ${mineSummary}
       <div class="score-wrap">
         <table class="score-table">
           <thead><tr><th>玩家</th><th>叫／贏</th><th>叫牌分</th><th>獎勵</th><th>本局</th><th>總分</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
-      ${over ? hostBtns : `<button class="btn btn-gold" data-act="continue">${nextLabel}</button>`}
+      ${over ? hostBtns : continueBtn}
     </div>
   </div>`;
 }
@@ -716,7 +920,7 @@ function scoreHTML(v) {
 function renderRules() {
   return `
     ${bannerHTML()}
-    <div class="screen">
+    <div class="screen rules-screen">
       <div class="topbar">
         <button class="btn-text" data-act="close-rules">返回</button>
         <h2>規則</h2>
@@ -725,7 +929,12 @@ function renderRules() {
       <div class="rules-page" style="color:var(--cream)">
         <h2 style="color:var(--gold-soft);margin:0 0 12px">骷髏王規則</h2>
         <h3 style="color:var(--gold)">點玩</h3>
-        <p>一共 10 局。第 1 局每人 1 張，之後每局多一張，第 10 局各 10 張。睇完手牌之後，大家一齊叫會贏幾墩（其他人嘅叫牌要等齊先睇到）。估中先有分，估錯就扣分。</p>
+        <p>一共 10 局。第 1 局每人 1 張，之後每局多一張，第 10 局各 10 張。睇完手牌之後，大家一齊叫會贏幾墩（其他人嘅叫牌要等齊先睇到）。估中先有分，估錯就扣分。叫 0 即係估一墩都唔贏。</p>
+        <h3 style="color:var(--gold)">特殊牌係咩？</h3>
+        <p>特殊牌隨時可出，唔使跟花。牌局入面撳「牌義」，或者手牌右上角嘅「？」，可以隨時再睇。</p>
+        <p><strong>母老虎</strong>：出牌時要宣布當海盜定逃脫。當海盜就可以搶墩；當逃脫就盡量唔贏墩。</p>
+        <p><strong>逃脫</strong>：通常唔會贏墩。<strong>海盜</strong>大過人魚同數字牌。<strong>人魚</strong>大過數字牌，而且可以捕獲骷髏王。<strong>骷髏王</strong>大過海盜，但會被人魚捕獲。</p>
+        <p><strong>八爪魚</strong>會食咗整墩，無人贏。<strong>白鯨</strong>令特殊牌作廢，由最高點數嘅數字牌贏。</p>
         <h3 style="color:var(--gold)">出牌</h3>
         <p>第一張有花色嘅牌決定呢墩要跟嘅花。如果你出數字牌，有嗰種花就要跟。逃脫、海盜、人魚、母老虎、骷髏王、八爪魚同白鯨隨時都可以出，唔使跟花。黑色骷髏旗係王牌，大過其他三種顏色嘅數字牌。</p>
         <p>如果第一張係逃脫或「母老虎當逃脫」，之後第一張數字牌先定花。如果第一張係人魚、海盜、骷髏王、「母老虎當海盜」、八爪魚或白鯨，呢墩就冇得跟花，各人可以出任何牌。如果花色已經定咗，之後先出白鯨，之後出數字牌嘅人仍然要跟嗰個已定花色。</p>

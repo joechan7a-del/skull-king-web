@@ -7,6 +7,8 @@ import {
   resolveTrick,
   bonusPoints,
   scoreRound,
+  ledSuit,
+  SUIT_INFO,
 } from "./rules.js";
 import { bid as aiBid, choosePlay as aiChoosePlay } from "./ai.js";
 
@@ -323,6 +325,33 @@ export class Game {
     return this._commitPlay(this.currentPlayerIndex, card, asPirate);
   }
 
+  followHintFor(playerId) {
+    const myIndex = this.playerIndexById(playerId);
+    const current = this.players[this.currentPlayerIndex];
+    if (this.phase === PHASE.BIDDING) {
+      return "睇完手牌，叫你估呢局會贏幾墩。其他人嘅叫牌要等齊先睇到。";
+    }
+    if (this.phase === PHASE.CHOOSING_TIGRESS) {
+      return this.pendingTigress && this.pendingTigress.playerId === playerId
+        ? "請揀母老虎當海盜定逃脫。"
+        : `等${current?.name || "對手"}揀母老虎當海盜定逃脫。`;
+    }
+    if (this.phase !== PHASE.PLAYING && this.phase !== PHASE.TRICK_RESULT) return "";
+    const trick = this.phase === PHASE.TRICK_RESULT ? this.lastTrick : this.trick;
+    if (!trick.length) {
+      if (myIndex === this.currentPlayerIndex) {
+        return "由你先出呢一墩。第一張有花色嘅牌會定花；如果特殊牌先出，呢墩就冇得跟花。";
+      }
+      return `等${current?.name || "對手"}先出。第一張有花色嘅牌會定花。`;
+    }
+    const suit = ledSuit(trick);
+    if (suit && SUIT_INFO[suit]) {
+      const info = SUIT_INFO[suit];
+      return `而家要跟${info.shortName}色（${info.chineseName}）。你有呢種花就要跟；特殊牌隨時可出。`;
+    }
+    return "呢墩由特殊牌先出，冇得跟花，可以出任何牌。";
+  }
+
   viewFor(playerId) {
     const myIndex = this.playerIndexById(playerId);
     const me = myIndex >= 0 ? this.players[myIndex] : null;
@@ -331,6 +360,8 @@ export class Game {
     const legal = me && this.phase === PHASE.PLAYING && this.currentPlayerIndex === myIndex
       ? legalCards(me.hand, this.trick).map((c) => c.id)
       : [];
+    const trickForSuit = this.phase === PHASE.TRICK_RESULT ? this.lastTrick : this.trick;
+    const suit = trickForSuit && trickForSuit.length ? ledSuit(trickForSuit) : null;
 
     return {
       phase: this.phase,
@@ -359,6 +390,8 @@ export class Game {
       myHand: me ? me.hand : [],
       legalCardIds: legal,
       isMyTurn: this.phase === PHASE.PLAYING && myIndex === this.currentPlayerIndex,
+      ledSuit: suit,
+      followHint: this.followHintFor(playerId),
       scores: this.scores,
       players: this.players.map((p, i) => ({
         id: p.id,

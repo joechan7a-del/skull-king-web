@@ -5,7 +5,7 @@ import { AI_NAMES } from "./ai.js";
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const ROOM_TTL_MS = 3 * 60 * 60 * 1000;
 const EMPTY_TTL_MS = 20 * 60 * 1000;
-const TRICK_PAUSE_MS = 1600;
+const TRICK_PAUSE_MS = 2800;
 const AI_PAUSE_MS = 700;
 
 export class RoomManager {
@@ -80,6 +80,9 @@ export class RoomManager {
     this.touch(room);
     if (!room.humans.length || room.humans.every((h) => !h.connected)) {
       room.emptySince = Date.now();
+    }
+    if (room.game && room.game.phase === PHASE.ROUND_RESULT) {
+      this._maybeAdvanceContinue(room);
     }
   }
 
@@ -241,8 +244,23 @@ export class RoomManager {
       return result;
     }
     if (room.game.phase !== PHASE.ROUND_RESULT) return { error: "而家唔使繼續。" };
-    // First human to confirm advances the table.
+    if (!room.continuing) room.continuing = new Set();
     room.continuing.add(playerId);
+    this.touch(room);
+    return this._maybeAdvanceContinue(room);
+  }
+
+  _connectedHumanIds(room) {
+    return room.humans.filter((h) => h.connected).map((h) => h.id);
+  }
+
+  _maybeAdvanceContinue(room) {
+    if (!room.game || room.game.phase !== PHASE.ROUND_RESULT) return { ok: true, waiting: true };
+    if (!room.continuing) room.continuing = new Set();
+    const needed = this._connectedHumanIds(room);
+    if (needed.length && !needed.every((id) => room.continuing.has(id))) {
+      return { ok: true, waiting: true };
+    }
     this._clearTimer(room);
     const result = room.game.continueAfterRound();
     if (result.error) return result;
@@ -309,7 +327,21 @@ export class RoomManager {
         })),
       };
     }
-    return { ...base, ...room.game.viewFor(playerId) };
+    return { ...base, ...room.game.viewFor(playerId), ...this._continueView(room) };
+  }
+
+  _continueView(room) {
+    const inResult = room.game && room.game.phase === PHASE.ROUND_RESULT;
+    if (!inResult) {
+      return { continueReady: [], continueNeeded: [], continueWaitingNames: [] };
+    }
+    const needed = room.humans.filter((h) => h.connected);
+    const ready = room.continuing || new Set();
+    return {
+      continueReady: needed.filter((h) => ready.has(h.id)).map((h) => h.id),
+      continueNeeded: needed.map((h) => h.id),
+      continueWaitingNames: needed.filter((h) => !ready.has(h.id)).map((h) => h.name),
+    };
   }
 
   _lobbyStatus(room, aiCount) {
