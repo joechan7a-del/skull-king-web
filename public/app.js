@@ -60,6 +60,18 @@ const state = {
   lobbySnapshot: null,
   codeBoxFocus: null,
   autoJoinLock: false,
+  shakeCardId: "",
+  shakeToken: 0,
+  shakeTimer: 0,
+  roundSplash: null,
+  splashTimer: 0,
+  trickCaptionKey: "",
+  trickCaptionStartedAt: 0,
+  trickCaptionTimer: 0,
+  celebrateKey: "",
+  confetti: null,
+  confettiTimer: 0,
+  lobbyNameDraft: null,
 };
 
 const app = document.getElementById("app");
@@ -557,6 +569,280 @@ async function shareRoom() {
   copyText(url);
 }
 
+const LIVE_SHARE_URL = "https://onepieceking.up.railway.app";
+
+function prefersReducedMotion() {
+  return !!window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+}
+
+function uniqueFirstPlace(v) {
+  const players = [...(v?.players || [])];
+  if (!players.length) return null;
+  const top = Math.max(...players.map((p) => p.score));
+  const tied = players.filter((p) => p.score === top);
+  return tied.length === 1 ? tied[0] : null;
+}
+
+function rankingsForShare(v) {
+  const players = [...(v?.players || [])].sort((a, b) => b.score - a.score || 0);
+  let lastScore = null;
+  let lastPlace = 0;
+  let seen = 0;
+  return players.map((p) => {
+    seen += 1;
+    if (lastScore === null || p.score !== lastScore) {
+      lastPlace = seen;
+      lastScore = p.score;
+    }
+    const mine = p.id === v.yourId ? "（你）" : "";
+    return `${lastPlace}. ${p.name}${mine} ${p.score} 分`;
+  });
+}
+
+function resultsShareText(v) {
+  const lines = rankingsForShare(v);
+  const winner = uniqueFirstPlace(v);
+  const headline = winner
+    ? `${winner.name}${winner.id === v.yourId ? "（你）" : ""}勝出！`
+    : "呢場打和。";
+  return `骷髏王戰績\n${headline}\n${lines.join("\n")}\n一齊嚟玩：${LIVE_SHARE_URL}`;
+}
+
+async function shareResults() {
+  const v = state.view;
+  if (!v) return;
+  const text = resultsShareText(v);
+  if (typeof navigator.share === "function") {
+    try {
+      await navigator.share({ title: "骷髏王戰績", text, url: LIVE_SHARE_URL });
+    } catch (err) {
+      const msg = String(err?.name || "") + " " + String(err?.message || "");
+      const cancelled = /AbortError|cancel|abort/i.test(msg);
+      if (!cancelled) copyText(text);
+    }
+    return;
+  }
+  copyText(text);
+}
+
+function maybeRoundSplash(msg, { prevRound, prevPhase, prevInGame } = {}) {
+  if (!msg?.inGame || msg.phase !== "bidding") return;
+  if (!prevPhase) return;
+  const entered = prevPhase === "lobby" || prevPhase === "roundResult" || prevPhase === "gameOver" || (prevRound != null && prevRound !== msg.round);
+  if (!entered) return;
+  const round = msg.round || 1;
+  const text = round === 1 ? "遊戲開始！第 1 局" : `第 ${round} 局開始`;
+  state.roundSplash = { text, startedAt: performance.now() };
+  clearTimeout(state.splashTimer);
+  const ms = prefersReducedMotion() ? 500 : 1150;
+  state.splashTimer = setTimeout(() => {
+    state.roundSplash = null;
+    state.splashTimer = 0;
+    render();
+  }, ms);
+}
+
+function roundSplashHTML() {
+  if (!state.roundSplash) return "";
+  return `<div class="round-splash" role="status">${escapeHtml(state.roundSplash.text)}</div>`;
+}
+
+function maybeCelebrateWin(v) {
+  if (!v || v.phase !== "gameOver") return;
+  const key = `win:${v.round}:${(v.players || []).map((p) => p.score).join(",")}`;
+  if (state.celebrateKey === key) return;
+  state.celebrateKey = key;
+  const winner = uniqueFirstPlace(v);
+  if (!winner || winner.id !== v.yourId || prefersReducedMotion()) {
+    state.confetti = null;
+    return;
+  }
+  state.confetti = { startedAt: performance.now() };
+  playBeepSequence([523, 659, 784, 1046], { type: "triangle", peak: 0.06, attack: 0.02, decay: 0.28, step: 0.1 });
+  haptic(28);
+  clearTimeout(state.confettiTimer);
+  state.confettiTimer = setTimeout(() => {
+    state.confetti = null;
+    state.confettiTimer = 0;
+    render();
+  }, 2200);
+}
+
+function confettiHTML() {
+  if (!state.confetti) return "";
+  const colors = ["#edbf59", "#fae094", "#f5e8c7", "#7dff9a", "#8ec8ff", "#ffd0a0"];
+  const bits = Array.from({ length: 20 }, (_, i) => {
+    const x = 6 + ((i * 4.7) % 88);
+    const delay = (i % 8) * 0.04;
+    const dur = 1.35 + (i % 5) * 0.12;
+    const c = colors[i % colors.length];
+    const rot = (i * 47) % 360;
+    const dx = ((i % 2 === 0 ? 1 : -1) * (8 + (i * 5) % 18));
+    return `<i style="--x:${x}%;--d:${delay}s;--t:${dur}s;--c:${c};--r:${rot}deg;--dx:${dx}px"></i>`;
+  }).join("");
+  return `<div class="confetti-burst" aria-hidden="true">${bits}</div>`;
+}
+
+function shakeIllegalCard(id) {
+  if (!id) return;
+  state.shakeCardId = id;
+  state.shakeToken = (state.shakeToken || 0) + 1;
+  clearTimeout(state.shakeTimer);
+  state.shakeTimer = setTimeout(() => {
+    if (state.shakeCardId === id) state.shakeCardId = "";
+    state.shakeTimer = 0;
+  }, 420);
+}
+
+function sheetHandleHTML() {
+  return `<div class="sheet-handle" aria-hidden="true"></div>`;
+}
+
+function dismissSheet(act) {
+  if (act === "close-inspect") state.inspect = null;
+  else if (act === "close-score-peek") state.scorePeek = false;
+  else if (act === "close-prev-trick") state.prevTrickPeek = false;
+  else if (act === "close-show-code") state.showRoomCode = false;
+  else if (act === "cancel-leave") state.leaveConfirm = false;
+  else return;
+  render();
+}
+
+let suppressSheetClickUntil = 0;
+
+function bindSheetSwipe() {
+  app.querySelectorAll("[data-sheet-dismiss]").forEach((sheet) => {
+    const act = sheet.dataset.sheetDismiss;
+    if (!act) return;
+    let startY = 0;
+    let startX = 0;
+    let dragging = false;
+    let armed = false;
+    let dy = 0;
+    const overlay = sheet.closest(".overlay");
+    const resetPos = (animate) => {
+      sheet.style.transition = animate ? "transform 0.22s ease" : "";
+      sheet.style.transform = "";
+      if (overlay) overlay.style.background = "";
+      sheet.classList.remove("sheet-dragging");
+    };
+    const onDown = (e) => {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      if (e.target.closest("button, input, a, textarea, select, .score-wrap, .legend-list, .prev-plays, .inspect-card, .name-edit-row")) {
+        if (!e.target.closest(".sheet-handle")) return;
+      }
+      if (sheet.scrollTop > 0 && !e.target.closest(".sheet-handle")) return;
+      startY = e.clientY;
+      startX = e.clientX;
+      dragging = true;
+      armed = false;
+      dy = 0;
+      try { sheet.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+    };
+    const onMove = (e) => {
+      if (!dragging) return;
+      const y = e.clientY - startY;
+      const x = e.clientX - startX;
+      if (!armed) {
+        if (Math.abs(x) > 10 && Math.abs(x) > y) {
+          dragging = false;
+          resetPos(false);
+          return;
+        }
+        if (y > 8) {
+          armed = true;
+          sheet.classList.add("sheet-dragging");
+        } else if (y < -8) {
+          dragging = false;
+          return;
+        } else {
+          return;
+        }
+      }
+      dy = Math.max(0, y);
+      sheet.style.transition = "none";
+      sheet.style.transform = `translateY(${dy}px)`;
+      if (overlay) overlay.style.background = `rgba(0,0,0,${(0.62 * (1 - Math.min(dy / 420, 0.75))).toFixed(3)})`;
+      if (e.cancelable) e.preventDefault();
+    };
+    const onUp = () => {
+      if (!dragging) return;
+      dragging = false;
+      const close = dy > 96;
+      if (close) {
+        suppressSheetClickUntil = performance.now() + 400;
+        resetPos(false);
+        dismissSheet(act);
+        return;
+      }
+      if (armed) suppressSheetClickUntil = performance.now() + 350;
+      resetPos(true);
+    };
+    sheet.addEventListener("pointerdown", onDown);
+    sheet.addEventListener("pointermove", onMove, { passive: false });
+    sheet.addEventListener("pointerup", onUp);
+    sheet.addEventListener("pointercancel", onUp);
+  });
+}
+
+function playWaitHTML(v) {
+  if (!v || (v.phase !== "playing" && v.phase !== "choosingTigress")) return "";
+  const players = v.players || [];
+  const played = new Set((v.trick || []).map((p) => p.playerIndex));
+  const waiting = players.filter((_, i) => !played.has(i));
+  if (!waiting.length) return "";
+  const names = waiting.map((p) => escapeHtml(p.name) + (p.id === v.yourId ? "（你）" : "")).join("、");
+  return `<div class="play-wait" aria-live="polite">仲等：${names}</div>`;
+}
+
+function trickCaptionHTML(v) {
+  if (!v || v.phase !== "trickResult") return "";
+  const key = `${v.round}:${v.trickNumber}:${v.lastTrickDestroyed ? "void" : v.lastWinnerIndex}`;
+  if (state.trickCaptionKey !== key) {
+    state.trickCaptionKey = key;
+    state.trickCaptionStartedAt = performance.now();
+    clearTimeout(state.trickCaptionTimer);
+    state.trickCaptionTimer = setTimeout(() => {
+      state.trickCaptionTimer = 0;
+      if (state.view?.phase === "trickResult") render();
+    }, 1050);
+  }
+  const elapsed = performance.now() - state.trickCaptionStartedAt;
+  if (elapsed > 1050) return "";
+  let text;
+  if (v.lastTrickDestroyed) text = "呢墩作廢";
+  else {
+    const winner = (v.players || [])[v.lastWinnerIndex];
+    text = `${winner?.name || "有人"} 贏咗呢墩`;
+  }
+  return `<div class="trick-caption${v.lastTrickDestroyed ? " void" : ""}" role="status">${escapeHtml(text)}</div>`;
+}
+
+function lastTrickCueHTML(v) {
+  if (!v) return "";
+  if (v.phase !== "playing" && v.phase !== "choosingTigress") return "";
+  const total = v.tricksTotal || v.cardsDealt;
+  if (!total || v.trickNumber !== total) return "";
+  return `<div class="last-trick-cue" role="status">最後一墩</div>`;
+}
+
+function submitLobbyName() {
+  const v = state.view;
+  if (!v || v.phase !== "lobby") return;
+  const current = (v.lobbyPlayers || []).find((p) => p.id === v.yourId)?.name || state.name || "";
+  const next = String(state.lobbyNameDraft ?? state.name ?? "").replace(/\s+/g, " ").trim().slice(0, 12);
+  const name = next || current || "你";
+  if (name === current) {
+    state.lobbyNameDraft = name;
+    return;
+  }
+  state.name = name;
+  state.lobbyNameDraft = name;
+  try { localStorage.setItem(NAME_KEY, name); } catch { /* ignore */ }
+  send({ type: "setName", name });
+  render();
+}
+
 let wakeLockSentinel = null;
 
 async function requestWakeLock() {
@@ -670,6 +956,15 @@ function goHome({ clearToken = false } = {}) {
   state.lobbySnapshot = null;
   state.makeReady = false;
   state.autoJoinLock = false;
+  state.shakeCardId = "";
+  clearTimeout(state.shakeTimer);
+  state.roundSplash = null;
+  clearTimeout(state.splashTimer);
+  state.trickCaptionKey = "";
+  clearTimeout(state.trickCaptionTimer);
+  state.confetti = null;
+  clearTimeout(state.confettiTimer);
+  state.lobbyNameDraft = null;
   resetTrickAnim();
   releaseWakeLock();
   if (clearToken) {
@@ -748,6 +1043,13 @@ function scheduleReconnect() {
 
 function onMessage(msg) {
   if (msg.type === "error") {
+    if (/呢個名已經有人用咗/.test(msg.message || "")) {
+      const cur = (state.view?.lobbyPlayers || []).find((p) => p.id === state.view?.yourId)?.name;
+      if (cur) {
+        state.name = cur;
+        state.lobbyNameDraft = cur;
+      }
+    }
     setError(msg.message);
     // If reconnect failed, stay on home with the message.
     if (state.screen !== "home" && /房間已經散|找不到之前|房號唔啱/.test(msg.message || "")) {
@@ -771,10 +1073,17 @@ function onMessage(msg) {
   if (msg.type === "pong") return;
   if (msg.type === "state") {
     const prevRound = state.view?.round;
+    const prevPhase = state.view?.phase;
+    const prevInGame = !!state.view?.inGame;
     state.view = msg;
     state.code = msg.code;
     state.error = "";
     if (msg.phase === "lobby" || !msg.inGame) {
+      const meName = (msg.lobbyPlayers || []).find((p) => p.id === msg.yourId)?.name;
+      if (meName && document.activeElement?.id !== "lobby-name-input") {
+        state.name = meName;
+        state.lobbyNameDraft = meName;
+      }
       state.screen = state.screen === "rules" ? "rules" : "lobby";
       if (state.screen !== "rules") state.rulesReturn = "lobby";
       state.trickAnimReady = false;
@@ -816,6 +1125,8 @@ function onMessage(msg) {
       maybeLobbyToasts(msg);
       maybeCelebrateMake(msg);
       maybeAnnounceTurn(msg);
+      maybeRoundSplash(msg, { prevRound, prevPhase, prevInGame });
+      maybeCelebrateWin(msg);
     }
     render();
   }
@@ -905,7 +1216,8 @@ function dismissA2hs() {
 
 function leaveConfirmHTML() {
   if (!state.leaveConfirm) return "";
-  return "<div class=\"overlay center\" data-act=\"cancel-leave\"><div class=\"sheet\" data-stop=\"1\">" +
+  return "<div class=\"overlay center\" data-act=\"cancel-leave\"><div class=\"sheet\" data-stop=\"1\" data-sheet-dismiss=\"cancel-leave\">" +
+    sheetHandleHTML() +
     "<h2>確定離開？</h2>" +
     "<p>牌局仲進行緊。用同一部電話重新打開呢個連結就可以返嚟繼續。</p>" +
     "<div class=\"confirm-actions\"><button type=\"button\" class=\"btn btn-sheet\" data-act=\"cancel-leave\">繼續玩</button>" +
@@ -915,7 +1227,8 @@ function leaveConfirmHTML() {
 function showCodeHTML(code) {
   if (!state.showRoomCode || !code) return "";
   return "<div class=\"overlay center show-code-overlay\" data-act=\"close-show-code\">" +
-    "<div class=\"sheet show-code-sheet\" data-stop=\"1\">" +
+    "<div class=\"sheet show-code-sheet\" data-stop=\"1\" data-sheet-dismiss=\"close-show-code\">" +
+    sheetHandleHTML() +
     "<p class=\"label\">把房號出示俾朋友</p>" +
     "<div class=\"giant-code\">" + escapeHtml(code) + "</div>" +
     "<p class=\"show-code-url\">" + escapeHtml(shareUrl(code)) + "</p>" +
@@ -1044,6 +1357,11 @@ function discardSavedGame() {
 // Event delegation
 app.addEventListener("pointerdown", () => { unlockAudio(); syncWakeLock(); }, { passive: true });
 app.addEventListener("click", (e) => {
+  if (performance.now() < suppressSheetClickUntil) {
+    e.preventDefault();
+    e.stopPropagation();
+    return;
+  }
   const t = e.target.closest("[data-act]");
   if (!t) return;
   // Only ignore backdrop taps that land inside the sheet; 知道喇 itself must still close.
@@ -1066,7 +1384,9 @@ app.addEventListener("click", (e) => {
   else if (act === "inspect") {
     e.stopPropagation();
     if (!e.target.closest(".card-info")) playCardFlip();
-    openInspect(t.dataset.id, t.dataset.why || "");
+    const id = t.dataset.id;
+    if (t.closest(".hand .sk-wrap.inspect-only, .hand .sk-wrap.unplayable")) shakeIllegalCard(id);
+    openInspect(id, t.dataset.why || "");
     return;
   }
   else if (act === "close-inspect") { state.inspect = null; render(); return; }
@@ -1076,6 +1396,8 @@ app.addEventListener("click", (e) => {
   else if (act === "prev-trick") { state.inspect = null; state.scorePeek = false; state.prevTrickPeek = true; render(); return; }
   else if (act === "close-prev-trick") { state.prevTrickPeek = false; render(); return; }
   else if (act === "share-room") { shareRoom(); return; }
+  else if (act === "share-results") { shareResults(); return; }
+  else if (act === "set-name") { submitLobbyName(); return; }
   else if (act === "copy-code") copyText(state.code);
   else if (act === "copy-link") copyText(shareUrl(state.code));
   else if (act === "seats-inc") send({ type: "setSeats", count: (view?.seats || 4) + 1 });
@@ -1117,6 +1439,7 @@ app.addEventListener("click", (e) => {
     state.inspect = null;
     playCardFlip();
     if (view?.phase !== "playing" || !view?.isMyTurn || !legal.has(id)) {
+      if (t.closest(".hand .sk-wrap")) shakeIllegalCard(id);
       openInspect(id, t.dataset.why || "");
       return;
     }
@@ -1166,14 +1489,24 @@ app.addEventListener("input", (e) => {
   const t = e.target;
   if (t.id === "name-input") {
     state.name = t.value;
+  } else if (t.id === "lobby-name-input") {
+    state.lobbyNameDraft = t.value;
   } else if (t.id === "code-input") {
     state.joinCode = t.value.toUpperCase();
   }
 });
 
+app.addEventListener("focusout", (e) => {
+  if (e.target.id === "lobby-name-input") submitLobbyName();
+});
+
 app.addEventListener("keydown", (e) => {
   if (e.key !== "Enter") return;
   if (e.target.id === "code-input") joinRoom();
+  else if (e.target.id === "lobby-name-input") {
+    e.preventDefault();
+    submitLobbyName();
+  }
   else if (e.target.id === "name-input" && state.screen === "home") {
     if ((state.joinCode || pathCode()).trim()) joinRoom();
   }
@@ -1275,7 +1608,8 @@ function inspectHTML() {
       })
       .join("");
     return `<div class="overlay center" data-act="close-inspect">
-      <div class="sheet inspect-sheet" data-stop="1">
+      <div class="sheet inspect-sheet" data-stop="1" data-sheet-dismiss="close-inspect">
+        ${sheetHandleHTML()}
         <h2>特殊牌係咩？</h2>
         <p>特殊牌隨時可以出，唔使跟花。撳手牌右上角嘅「？」可以隨時再睇。</p>
         <div class="legend-list">${items}</div>
@@ -1289,8 +1623,9 @@ function inspectHTML() {
     ? (SPECIAL_INFO[card.special]?.chineseName || "")
     : `${SUIT_INFO[card.suit]?.chineseName || ""} ${card.rank}`;
   return `<div class="overlay center" data-act="close-inspect">
-    <div class="sheet inspect-sheet" data-stop="1">
-      <div class="inspect-card">${cardFaceHTML(card, { tigressAsPirate: ins.tigressAsPirate })}</div>
+    <div class="sheet inspect-sheet" data-stop="1" data-sheet-dismiss="close-inspect">
+      ${sheetHandleHTML()}
+      <div class="inspect-card${ins.why ? " illegal-shake" : ""}">${cardFaceHTML(card, { tigressAsPirate: ins.tigressAsPirate })}</div>
       <h2>${escapeHtml(title)}</h2>
       <p>${escapeHtml(help)}</p>
       ${ins.why ? `<p class="why-line">${escapeHtml(ins.why)}</p>` : ""}
@@ -1356,13 +1691,14 @@ function renderLobby() {
   const rows = [
     ...humans.map((h) => {
       const tags = [];
-      if (h.isHost) tags.push(`<span class="pill">房主</span>`);
+      if (h.isHost) tags.push(`<span class="pill host">房主</span>`);
       if (h.ready) tags.push(`<span class="pill">已準備</span>`);
       if (!h.connected) tags.push(`<span class="pill down">已斷線</span>`);
-      return `<div class="player-row">
-        <div class="avatar ${h.isHost ? "gold" : ""}">${escapeHtml(h.name.slice(0, 1))}</div>
+      const display = h.id === v.yourId ? (state.name || h.name) : h.name;
+      return `<div class="player-row${h.id === v.yourId ? " me" : ""}">
+        <div class="avatar ${h.isHost ? "gold" : ""}">${escapeHtml((display || "?").slice(0, 1))}</div>
         <div class="meta">
-          <div class="name">${escapeHtml(h.name)}${h.id === v.yourId ? "（你）" : ""}</div>
+          <div class="name">${escapeHtml(display)}${h.id === v.yourId ? "（你）" : ""}</div>
         </div>
         ${tags.join("")}
       </div>`;
@@ -1429,6 +1765,17 @@ function renderLobby() {
       <div class="panel">
         <h3>玩家</h3>
         <div class="player-list">${rows.join("") || "<div class='sub'>等緊人加入…</div>"}</div>
+        ${(() => {
+          if (state.lobbyNameDraft == null) state.lobbyNameDraft = state.name || me?.name || "";
+          const draft = state.lobbyNameDraft;
+          return `<div class="lobby-name-edit">
+            <label class="field-label" for="lobby-name-input">改你嘅名</label>
+            <div class="name-edit-row">
+              <input id="lobby-name-input" maxlength="12" value="${escapeHtml(draft)}" autocomplete="nickname" enterkeyhint="done" />
+              <button type="button" class="btn btn-gold" data-act="set-name">確定</button>
+            </div>
+          </div>`;
+        })()}
       </div>
       <div class="status">${escapeHtml(v.statusMessage || "")}</div>
       <div class="error-line">${escapeHtml(state.error)}</div>
@@ -1697,9 +2044,11 @@ function circleTableHTML(v) {
   }).join("");
 
   let center = "";
+  const caption = trickCaptionHTML(v);
   const midTrick = (v.phase === "playing" || v.phase === "choosingTigress") && (v.trick || []).length;
   const lead = midTrick ? v.currentTrickLead : null;
-  if (destroyed) center = `<div class="table-center void">呢墩作廢，無人贏</div>`;
+  if (caption) center = caption;
+  else if (destroyed) center = `<div class="table-center void">呢墩作廢，無人贏</div>`;
   else if (!(v.trick || []).length && bidding) center = `<div class="table-center dim">叫牌中<br /><span class="arrow-hint">順時針出牌</span></div>`;
   else if (!(v.trick || []).length) center = `<div class="table-center dim">呢墩尚未出牌<br /><span class="arrow-hint">順時針出牌</span></div>`;
   else if (lead?.destroyed) center = `<div class="table-center lead void-soon">呢墩快將作廢</div>`;
@@ -1716,7 +2065,7 @@ function circleTableHTML(v) {
     : "";
   return `<div class="circle-wrap">
     <div class="circle-table n-${n} ${destroyed ? "destroyed" : ""}" role="group" aria-label="牌桌，出牌順序順時針">
-      <div class="table-felt${suitClass}">${tableArrowsSVG()}${center}${flourishBannerHTML()}</div>
+      <div class="table-felt felt-rich${suitClass}">${tableArrowsSVG()}${lastTrickCueHTML(v)}${center}${flourishBannerHTML()}</div>
       ${seats}
     </div>
   </div>`;
@@ -1774,7 +2123,8 @@ function scorePeekHTML(v) {
     return `<tr class="${mine ? "me" : ""}"><td>${escapeHtml(p.name)}${mine ? "（你）" : ""}</td><td>${escapeHtml(bid)}</td><td><strong>${p.score}</strong></td></tr>`;
   }).join("");
   return `<div class="overlay center" data-act="close-score-peek">
-    <div class="sheet" data-stop="1">
+    <div class="sheet" data-stop="1" data-sheet-dismiss="close-score-peek">
+      ${sheetHandleHTML()}
       <h2>而家分數</h2>
       <p>呢個係到而家嘅總分；一局打完先會再計呢局得失。</p>
       <div class="score-wrap">
@@ -1815,7 +2165,8 @@ function prevTrickSheetHTML(v) {
     ? `<div class="bonus-banner">${t.details.map((d) => `<span class="bonus-chip">${escapeHtml(d)}</span>`).join("")}</div>`
     : "";
   return `<div class="overlay center" data-act="close-prev-trick">
-    <div class="sheet inspect-sheet" data-stop="1">
+    <div class="sheet inspect-sheet" data-stop="1" data-sheet-dismiss="close-prev-trick">
+      ${sheetHandleHTML()}
       <h2>上一墩</h2>
       <p>${escapeHtml(result)}</p>
       ${details}
@@ -1959,13 +2310,14 @@ function renderTable() {
       if (handCards.length === 1 && (v.phase === "playing" || v.phase === "choosingTigress" || v.phase === "trickResult")) {
         tag += `<span class="card-tag last">最後</span>`;
       }
+      const shaking = !isLegal && state.shakeCardId === c.id ? " illegal-shake" : "";
       if (isLegal) {
         return `<div class="sk-wrap${selected ? " selected" : ""} playable${dealCls}" ${style}>
           <button class="sk-play" data-act="select-card" data-id="${escapeHtml(c.id)}">${inner.replace("sk-card ", `sk-card legal ${selected ? "picked " : ""}`)}</button>
           ${info}${tag}
         </div>`;
       }
-      return `<div class="sk-wrap inspect-only${dim ? " unplayable" : ""}${dealCls}" ${style}>
+      return `<div class="sk-wrap inspect-only${dim ? " unplayable" : ""}${dealCls}${shaking}" ${style}>
         <button class="sk-play" data-act="inspect" data-id="${escapeHtml(c.id)}" data-why="${escapeHtml(why)}">${inner}</button>
         ${info}
       </div>`;
@@ -1976,7 +2328,7 @@ function renderTable() {
     ? `<div class="next-trick"><button class="btn btn-ghost" data-act="continue">下一墩</button></div>`
     : "";
 
-  const tablePrompt = tablePromptHTML(v, { bidding, alreadyBid });
+  const tablePrompt = tablePromptHTML(v, { bidding, alreadyBid }) + playWaitHTML(v);
   const confirmBar = confirmBarHTML(v);
 
   return `
@@ -2021,6 +2373,8 @@ function renderTable() {
     ${prevTrickSheetHTML(v)}
     ${inspectHTML()}
     ${leaveConfirmHTML()}${showCodeHTML(v.code)}
+    ${roundSplashHTML()}
+    ${confettiHTML()}
     ${toastHTML()}
   `;
 }
@@ -2118,6 +2472,7 @@ function scoreHTML(v) {
           <tbody>${rows}</tbody>
         </table>
       </div>
+      ${over ? `<div class="actions"><button type="button" class="btn btn-ghost" data-act="share-results">分享戰績</button></div>` : ""}
       ${over ? hostBtns : continueBtn}
     </div>
   </div>`;
@@ -2169,6 +2524,7 @@ function render() {
   if (screen === "play") applyFlyAnim(state.view);
   bindCardLongPress();
   bindCodeBoxes();
+  bindSheetSwipe();
   scrollPlayableIntoView();
   syncWakeLock();
 }
