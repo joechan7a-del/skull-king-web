@@ -22,6 +22,7 @@ const state = {
   animatingPlayIds: new Set(),
   seenBustKeys: new Set(),
   explodingBustKeys: new Set(),
+  scorePeek: false,
   lastRound: 1,
   error: "",
   toast: "",
@@ -140,6 +141,30 @@ function playSound(key) {
 function playCardFlip() { playSound("flip"); }
 function playUiClick() { playSound("click"); }
 
+function haptic(ms = 12) {
+  try { navigator.vibrate?.(ms); } catch { /* not supported */ }
+}
+
+const SUIT_ORDER = { yellow: 0, green: 1, purple: 2, black: 3 };
+const SPECIAL_ORDER = { escape: 0, tigress: 1, mermaid: 2, pirate: 3, skullKing: 4, kraken: 5, whiteWhale: 6 };
+
+function sortHand(cards) {
+  return cards.slice().sort((a, b) => {
+    const as = a.special ? 1 : 0;
+    const bs = b.special ? 1 : 0;
+    if (as !== bs) return as - bs;
+    if (a.special) return (SPECIAL_ORDER[a.special] ?? 9) - (SPECIAL_ORDER[b.special] ?? 9);
+    const su = (SUIT_ORDER[a.suit] ?? 9) - (SUIT_ORDER[b.suit] ?? 9);
+    if (su) return su;
+    return (b.rank || 0) - (a.rank || 0);
+  });
+}
+
+function suitPip(suit) {
+  if (!suit || !SUIT_INFO[suit]) return "";
+  return `<span class="suit-pip suit-${suit}" title="${escapeHtml(suitLabel(suit))}" aria-hidden="true"></span>`;
+}
+
 function pathCode() {
   const m = location.pathname.match(/^\/r\/([A-Za-z0-9]+)/i);
   return m ? m[0].slice(3).toUpperCase() : "";
@@ -193,6 +218,7 @@ function goHome({ clearToken = false } = {}) {
   state.pendingRoom = "";
   state.selectedCardId = null;
   state.inspect = null;
+  state.scorePeek = false;
   resetTrickAnim();
   if (clearToken) {
     setToken("", "");
@@ -303,6 +329,7 @@ function onMessage(msg) {
       state.animatingPlayIds = new Set();
       state.seenBustKeys = new Set();
       state.explodingBustKeys = new Set();
+      state.scorePeek = false;
     } else {
       state.screen = state.screen === "rules" ? "rules" : "play";
       if (state.screen !== "rules") state.rulesReturn = "play";
@@ -433,7 +460,7 @@ app.addEventListener("click", (e) => {
   const act = t.dataset.act;
   const view = state.view;
   const cardActs = act === "inspect" || act === "select-card" || act === "play-card";
-  const silentActs = act === "close-inspect" && t.classList.contains("overlay");
+  const silentActs = t.classList.contains("overlay") && (act === "close-inspect" || act === "close-score-peek");
   if (!cardActs && !silentActs) playUiClick();
   if (act === "create") createRoom();
   else if (act === "join") joinRoom();
@@ -448,7 +475,9 @@ app.addEventListener("click", (e) => {
     return;
   }
   else if (act === "close-inspect") { state.inspect = null; render(); return; }
-  else if (act === "card-legend") { state.inspect = { type: "legend" }; render(); return; }
+  else if (act === "card-legend") { state.inspect = { type: "legend" }; state.scorePeek = false; render(); return; }
+  else if (act === "score-peek") { state.inspect = null; state.scorePeek = true; render(); return; }
+  else if (act === "close-score-peek") { state.scorePeek = false; render(); return; }
   else if (act === "copy-code") copyText(state.code);
   else if (act === "copy-link") copyText(shareUrl(state.code));
   else if (act === "seats-inc") send({ type: "setSeats", count: (view?.seats || 4) + 1 });
@@ -467,6 +496,7 @@ app.addEventListener("click", (e) => {
   else if (act === "bid-pick") { state.bidValue = Number(t.dataset.n); render(); }
   else if (act === "bid-submit") {
     if (state.bidValue == null) { setError("請先揀你叫幾多墩。"); return; }
+    haptic(16);
     send({ type: "bid", value: state.bidValue });
   }
   else if (act === "select-card" || act === "play-card") {
@@ -478,6 +508,7 @@ app.addEventListener("click", (e) => {
       openInspect(id, t.dataset.why || "");
       return;
     }
+    haptic(12);
     state.selectedCardId = state.selectedCardId === id ? null : id;
     render();
     return;
@@ -487,6 +518,7 @@ app.addEventListener("click", (e) => {
     const id = state.selectedCardId;
     state.selectedCardId = null;
     state.inspect = null;
+    haptic(18);
     send({ type: "play", cardId: id });
   }
   else if (act === "confirm-tig-pirate") {
@@ -494,6 +526,7 @@ app.addEventListener("click", (e) => {
     const id = state.selectedCardId;
     state.selectedCardId = null;
     state.inspect = null;
+    haptic(18);
     send({ type: "play", cardId: id, tigressAsPirate: true });
   }
   else if (act === "confirm-tig-escape") {
@@ -501,6 +534,7 @@ app.addEventListener("click", (e) => {
     const id = state.selectedCardId;
     state.selectedCardId = null;
     state.inspect = null;
+    haptic(18);
     send({ type: "play", cardId: id, tigressAsPirate: false });
   }
   else if (act === "cancel-play") {
@@ -553,8 +587,11 @@ window.addEventListener("popstate", () => {
 });
 
 function bannerHTML() {
-  if (state.conn === "reconnecting" || state.conn === "connecting") {
-    return `<div class="banner info">${state.conn === "reconnecting" ? "連線中斷，重新連接緊…" : "連線緊…"}</div>`;
+  if (state.conn === "reconnecting" || state.conn === "closed") {
+    return `<div class="banner warn reconnect" role="status">連線斷咗，正在重新連接。請稍等，唔好離開呢頁。</div>`;
+  }
+  if (state.conn === "connecting") {
+    return `<div class="banner info reconnect" role="status">連線緊，請稍等…</div>`;
   }
   return "";
 }
@@ -577,6 +614,7 @@ function openInspect(cardId, why) {
     }
   }
   if (!card) return;
+  state.scorePeek = false;
   const legal = new Set(v.legalCardIds || []);
   state.inspect = {
     type: "card",
@@ -868,6 +906,7 @@ function markBustExplode(p, v) {
   if (state.seenBustKeys.has(key)) return false;
   state.seenBustKeys.add(key);
   state.explodingBustKeys.add(key);
+  haptic(28);
   setTimeout(() => state.explodingBustKeys.delete(key), 800);
   return true;
 }
@@ -922,6 +961,11 @@ function circleTableHTML(v) {
     const win = v.phase === "trickResult" && !destroyed && playerIndex === v.lastWinnerIndex;
     const st = playerSeatStatus(p, v);
     const bidLine = seatBidLine(p, v);
+    const leadIndex = (v.trick || []).length
+      ? v.trick[0].playerIndex
+      : (v.phase === "playing" && !(v.trick || []).length ? v.currentPlayerIndex : -1);
+    const isLead = leadIndex === playerIndex;
+    const leadTag = !isLead || bidding ? "" : ((v.trick || []).length ? "領牌" : "先出");
     let card = "";
     if (played) {
       const slam = isJustPlayed(played.card.id) ? " slam" : "";
@@ -945,6 +989,7 @@ function circleTableHTML(v) {
         <div class="seat-meta">
           <div class="nm-row">
             <span class="nm">${escapeHtml(p.name)}${isMe ? "（你）" : ""}</span>
+            ${leadTag ? `<span class="seat-lead">${leadTag}</span>` : ""}
             ${thinking ? `<span class="seat-thinking">諗緊</span>` : ""}
           </div>
           ${bidLine.html}
@@ -982,7 +1027,7 @@ function tablePromptHTML(v, { bidding, alreadyBid } = {}) {
     if (v.ledSuit) text += `而家要跟${suitLabel(v.ledSuit)}。你有呢種花就要跟；特殊牌隨時可出。`;
     else if (!(v.trick || []).length) text += "由你先出呢一墩。第一張有花色嘅牌會定花；特殊牌先出就冇得跟花。";
     else text += "呢墩由特殊牌先出，冇得跟花，可以出任何牌。";
-    return `<div class="turn-banner mine">${escapeHtml(text)}</div>`;
+    return `<div class="turn-banner mine">${suitPip(v.ledSuit)}<span>${escapeHtml(text)}</span></div>`;
   }
   if (v.phase === "playing" || v.phase === "choosingTigress") {
     const cur = (v.players || [])[v.currentPlayerIndex];
@@ -992,9 +1037,46 @@ function tablePromptHTML(v, { bidding, alreadyBid } = {}) {
     else if (v.ledSuit) text = `輪到${name}出牌。而家要跟${suitLabel(v.ledSuit)}。`;
     else if (!(v.trick || []).length) text = `輪到${name}出牌。等佢出第一張先定花。`;
     else text = `輪到${name}出牌。呢墩冇得跟花。`;
-    return `<div class="turn-banner wait">${escapeHtml(text)}</div>`;
+    return `<div class="turn-banner wait">${suitPip(v.ledSuit)}<span>${escapeHtml(text)}</span></div>`;
   }
   return "";
+}
+
+function myBidTrackHTML(v) {
+  const me = (v.players || []).find((p) => p.id === v.yourId);
+  if (!me || !v.bidsRevealed || me.bid == null) return "";
+  if (v.phase === "bidding" || v.phase === "roundResult" || v.phase === "gameOver") return "";
+  const busted = me.tricksWon > me.bid;
+  let text;
+  if (busted) text = `你已爆咗：叫 ${me.bid} 贏 ${me.tricksWon}`;
+  else if (me.tricksWon === me.bid) text = `你：叫 ${me.bid} 贏 ${me.tricksWon}，已經夠墩`;
+  else text = `你：叫 ${me.bid} 贏 ${me.tricksWon}，仲差 ${me.bid - me.tricksWon} 墩`;
+  return `<div class="my-bid-track${busted ? " busted" : ""}">${escapeHtml(text)}</div>`;
+}
+
+function scorePeekHTML(v) {
+  if (!state.scorePeek || !v) return "";
+  const rows = (v.players || []).map((p) => {
+    const mine = p.id === v.yourId;
+    let bid = "—";
+    if (v.bidsRevealed && p.bid != null) bid = `叫 ${p.bid}／贏 ${p.tricksWon}`;
+    else if (mine && p.hasBid && p.bid != null) bid = `你叫咗 ${p.bid}`;
+    else if (v.phase === "bidding") bid = p.hasBid ? "已叫" : "未叫";
+    return `<tr class="${mine ? "me" : ""}"><td>${escapeHtml(p.name)}${mine ? "（你）" : ""}</td><td>${escapeHtml(bid)}</td><td><strong>${p.score}</strong></td></tr>`;
+  }).join("");
+  return `<div class="overlay center" data-act="close-score-peek">
+    <div class="sheet" data-stop="1">
+      <h2>而家分數</h2>
+      <p>呢個係到而家嘅總分；一局打完先會再計呢局得失。</p>
+      <div class="score-wrap">
+        <table class="score-table">
+          <thead><tr><th>玩家</th><th>叫／贏</th><th>總分</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <button class="btn btn-sheet" data-act="close-score-peek">返去牌桌</button>
+    </div>
+  </div>`;
 }
 
 function confirmBarHTML(v) {
@@ -1039,8 +1121,11 @@ function renderTable() {
       const on = state.bidValue === i ? "on" : "";
       return `<button class="${on}" data-act="bid-pick" data-n="${i}">${i}</button>`;
     }).join("");
+    const bidCount = (v.players || []).filter((p) => p.hasBid).length;
+    const bidTotal = (v.players || []).length;
     bidPanel = `<div class="bid-panel">
       <h3>${alreadyBid ? "已叫牌，等其他人" : "你估會贏幾墩？"}</h3>
+      <p class="bid-progress">已叫 ${bidCount}／${bidTotal} 人</p>
       <p>${alreadyBid ? `你叫咗 ${myBid} 墩。等其他人一齊叫完先揭曉。` : `睇完手牌先叫，可以叫 0 到 ${n}。其他人叫咩要等齊先睇到。`}</p>
       ${alreadyBid ? "" : `<p class="bid-hint">${escapeHtml(bidHint(n, state.bidValue))}</p>
         <div class="bid-grid">${btns}</div>
@@ -1050,7 +1135,7 @@ function renderTable() {
 
   const legal = new Set(v.legalCardIds || []);
   const canPlay = v.isMyTurn && v.phase === "playing";
-  const handCards = v.myHand || [];
+  const handCards = sortHand(v.myHand || []);
   const overlap = handOverlap(handCards.length);
   const hand = `<div class="hand-scroll"><div class="hand">${handCards
     .map((c, i) => {
@@ -1063,10 +1148,16 @@ function renderTable() {
       const info = c.special
         ? `<button class="card-info" data-act="inspect" data-id="${escapeHtml(c.id)}" aria-label="睇牌義">?</button>`
         : "";
+      let tag = "";
+      if (isLegal && v.ledSuit) {
+        tag = c.special
+          ? `<span class="card-tag special">特殊</span>`
+          : (c.suit === v.ledSuit ? `<span class="card-tag follow">跟</span>` : "");
+      }
       if (isLegal) {
         return `<div class="sk-wrap${selected ? " selected" : ""}" ${style}>
           <button class="sk-play" data-act="select-card" data-id="${escapeHtml(c.id)}">${inner.replace("sk-card ", `sk-card legal ${selected ? "picked " : ""}`)}</button>
-          ${info}
+          ${info}${tag}
         </div>`;
       }
       return `<div class="sk-wrap inspect-only" ${style}>
@@ -1093,6 +1184,7 @@ function renderTable() {
           <div class="sub">各 ${v.cardsDealt} 張</div>
         </div>
         <div class="header-actions">
+          <button class="btn-text" data-act="score-peek">分數</button>
           <button class="btn-text" data-act="card-legend">牌義</button>
           <button class="btn-text" data-act="rules">規則</button>
         </div>
@@ -1104,11 +1196,13 @@ function renderTable() {
         <div class="error-line">${escapeHtml(state.error)}</div>
         ${bidPanel}
         ${confirmBar}
+        ${myBidTrackHTML(v)}
         ${hand}
       </div>
     </div>
     ${v.pendingTigress ? tigressHTML() : ""}
     ${v.phase === "roundResult" || v.phase === "gameOver" ? scoreHTML(v) : ""}
+    ${scorePeekHTML(v)}
     ${inspectHTML()}
     ${toastHTML()}
   `;
@@ -1121,7 +1215,7 @@ function handOverlap(count) {
   const need = card * count;
   if (need <= width) return 8;
   const overlap = -Math.ceil((need - width) / (count - 1));
-  return Math.max(overlap, -(card - 28));
+  return Math.max(overlap, -(card - 38));
 }
 
 function tigressHTML() {

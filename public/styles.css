@@ -253,6 +253,17 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
 }
 .banner.warn { background: #8a3b2c; color: #fff; }
 .banner.info { background: #1c4a62; color: var(--gold-soft); }
+.banner.reconnect {
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.35;
+  padding: 12px 16px;
+  padding-top: calc(12px + var(--safe-top));
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  letter-spacing: 0.01em;
+}
+.banner.warn.reconnect { background: #c45c4a; color: #fff8dc; }
+.banner.info.reconnect { background: var(--gold); color: var(--ink); }
 .toast {
   position: fixed;
   left: 50%;
@@ -926,6 +937,23 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   color: inherit;
   font: inherit;
 }
+.card-tag {
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  transform: translateX(-50%);
+  z-index: 3;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 16px;
+  padding: 0 6px;
+  border-radius: 999px;
+  pointer-events: none;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.card-tag.follow { background: var(--gold); color: var(--ink); }
+.card-tag.special { background: #3a2450; color: var(--gold-soft); border: 1px solid rgba(237, 191, 89, 0.7); }
 .card-info {
   position: absolute;
   top: -4px;
@@ -1062,6 +1090,10 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   line-height: 1.4;
 }
 .turn-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   text-align: center;
   font-size: 15px;
   font-weight: 800;
@@ -1070,6 +1102,18 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   margin: 0 0 6px;
   line-height: 1.4;
 }
+.suit-pip {
+  flex: 0 0 auto;
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4);
+}
+.suit-pip.suit-yellow { background: #f3c94a; }
+.suit-pip.suit-green { background: #3aa86a; }
+.suit-pip.suit-purple { background: #a35bc4; }
+.suit-pip.suit-black { background: #1a1a1e; box-shadow: 0 0 0 2px rgba(237, 191, 89, 0.9); }
 .turn-banner.mine {
   background: var(--gold);
   color: var(--ink);
@@ -1143,6 +1187,40 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   text-align: center;
 }
 .bid-hint { color: var(--gold-soft); font-weight: 600; }
+.bid-progress {
+  margin: 4px 0 8px !important;
+  text-align: center;
+  font-size: 15px !important;
+  font-weight: 800 !important;
+  color: var(--gold-soft) !important;
+}
+.my-bid-track {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 800;
+  color: #fff4c4;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(237, 191, 89, 0.55);
+  border-radius: 10px;
+  padding: 6px 10px;
+  margin: 0 0 8px;
+}
+.my-bid-track.busted {
+  background: rgba(120, 18, 12, 0.88);
+  border-color: #ff8a6a;
+  color: #ffe4dc;
+}
+.seat-lead {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--ink);
+  background: #fff4c4;
+  border-radius: 999px;
+  padding: 0 5px;
+  line-height: 15px;
+  letter-spacing: 0.04em;
+}
 .tig-choices { margin: 8px 0 4px; }
 .tig-choices .btn { margin-top: 4px; }
 .tig-explain { text-align: left; margin: 6px 0 12px; padding: 0 4px; }
