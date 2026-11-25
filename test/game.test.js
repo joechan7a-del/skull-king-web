@@ -192,6 +192,19 @@ test("AI fills seats and can bid + play a whole round", () => {
   assert.equal(g.scores.length, 1);
 });
 
+test("createRoom defaults to 5 players and the host can still pick 2–6", () => {
+  const mgr = new RoomManager();
+  const { room, player: host } = mgr.createRoom({ name: "阿明" });
+  assert.equal(room.seats, 5);
+  assert.equal(mgr.setSeats(room, host.id, 2).ok ?? true, true);
+  assert.equal(room.seats, 2);
+  mgr.setSeats(room, host.id, 6);
+  assert.equal(room.seats, 6);
+  const bad = mgr.setSeats(room, host.id, 7);
+  assert.ok(bad?.error);
+  assert.equal(room.seats, 6);
+});
+
 test("room: two humans join, host starts 2+2 AI, reconnect mid-hand", () => {
   const mgr = new RoomManager();
   const { room, player: host } = mgr.createRoom({ name: "阿明" });

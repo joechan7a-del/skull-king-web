@@ -21,7 +21,7 @@ export class RoomManager {
     const room = {
       code,
       hostId: null,
-      seats: 4,
+      seats: 5,
       aiFill: true,
       humans: [],
       game: null,

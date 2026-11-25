@@ -135,3 +135,25 @@ test("tableArrowsSVG uses three large clockwise arrows", () => {
   assert.match(js, /arrow-hint">順時針/);
   assert.match(css, /\.table-arrows/);
 });
+
+test("the confirm-to-play bar overlays the dock and does not shrink the table", () => {
+  const bar = block(css, ".confirm-bar");
+  assert.match(bar, /position:\s*absolute/);
+  assert.doesNotMatch(bar, /margin:\s*0 0 8px/);
+  assert.match(js, /function confirmBarHTML/);
+  const dock = block(css, ".table-dock");
+  assert.match(dock, /position:\s*relative/);
+  assert.match(dock, /flex:\s*0 0 auto/);
+});
+
+test("a selected hand card keeps its size and stacks above its neighbours", () => {
+  assert.match(js, /z-index:\$\{selected \? 40 : i\}/);
+  assert.match(css, /\.hand \.sk-wrap\.selected/);
+  const sel = css.slice(css.indexOf(".hand .sk-wrap.selected"));
+  const chunk = sel.slice(0, 900);
+  assert.match(chunk, /z-index:\s*40/);
+  assert.doesNotMatch(chunk, /scale\(1\.1\)/);
+  assert.doesNotMatch(chunk, /scale\(1\.06\)/);
+  assert.match(chunk, /scale\(1\)/);
+  assert.match(chunk, /aspect-ratio:\s*2\.4\s*\/\s*3\.5/);
+});

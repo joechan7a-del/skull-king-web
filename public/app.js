@@ -1674,8 +1674,8 @@ app.addEventListener("click", (e) => {
   else if (act === "set-name") { submitLobbyName(); return; }
   else if (act === "copy-code") copyText(state.code);
   else if (act === "copy-link") copyText(shareUrl(state.code));
-  else if (act === "seats-inc") send({ type: "setSeats", count: (view?.seats || 4) + 1 });
-  else if (act === "seats-dec") send({ type: "setSeats", count: (view?.seats || 4) - 1 });
+  else if (act === "seats-inc") send({ type: "setSeats", count: (view?.seats || 5) + 1 });
+  else if (act === "seats-dec") send({ type: "setSeats", count: (view?.seats || 5) - 1 });
   else if (act === "ai-fill") send({ type: "setAiFill", enabled: t.dataset.on !== "1" });
   else if (act === "ready") send({ type: "ready", ready: t.dataset.on !== "1" });
   else if (act === "start") send({ type: "startGame" });
@@ -2601,7 +2601,7 @@ function renderTable() {
       const selected = isLegal && state.selectedCardId === c.id;
       const why = !isLegal ? cardPlayWhy(c, v) : "";
       const dealCls = dealing ? " deal-in" : "";
-      const style = `style="margin-right:${i === handCards.length - 1 ? 0 : overlap}px;z-index:${selected ? 20 : i};--deal-i:${i};--deal-base:${dealBaseMs}ms"`;
+      const style = `style="margin-right:${i === handCards.length - 1 ? 0 : overlap}px;z-index:${selected ? 40 : i};--deal-i:${i};--deal-base:${dealBaseMs}ms"`;
       const inner = cardFaceHTML(c, { dimmed: dim });
       const info = c.special
         ? `<button class="card-info" data-act="inspect" data-id="${escapeHtml(c.id)}" aria-label="睇牌義">?</button>`

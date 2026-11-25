@@ -426,6 +426,7 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
 
 /* Table */
 .table-screen {
+  position: relative;
   padding-top: calc(6px + var(--safe-top));
   padding-bottom: calc(6px + var(--safe-bottom));
   padding-left: 10px;
@@ -433,6 +434,7 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   overflow: hidden;
 }
 .table-dock {
+  position: relative;
   flex: 0 0 auto;
   min-height: 0;
   overflow-x: hidden;
@@ -1185,9 +1187,13 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
 }
 .hand .sk-card.legal { transform: translateY(-10px) scale(1); }
 .hand .sk-card.legal:active { transform: translateY(-14px) scale(0.98); }
+.hand .sk-wrap.selected {
+  z-index: 40;
+  position: relative;
+}
 .hand .sk-card.legal.picked,
 .hand .sk-wrap.selected .sk-card {
-  transform: translateY(-22px) scale(1.1);
+  transform: translateY(-10px) scale(1);
   transform-origin: center bottom;
   filter: brightness(1.06) drop-shadow(0 2px 4px rgba(0,0,0,0.4));
   width: 100%;
@@ -1195,12 +1201,13 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   aspect-ratio: 2.4 / 3.5;
   border-radius: 9px;
   box-shadow: none;
+  z-index: 40;
 }
 .hand .sk-card.legal.picked .sk-card-inner,
 .hand .sk-wrap.selected .sk-card-inner {
   box-shadow: 0 0 0 3px var(--gold);
 }
-.hand .sk-card.legal.picked:active { transform: translateY(-22px) scale(1.06); transform-origin: center bottom; }
+.hand .sk-card.legal.picked:active { transform: translateY(-12px) scale(1); transform-origin: center bottom; }
 .hand .sk-card.dimmed { pointer-events: none; opacity: 0.62; filter: saturate(0.85); }
 .hand .sk-wrap.unplayable { opacity: 1; }
 .hand .sk-card.legal {
@@ -1340,12 +1347,19 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
 .next-trick .btn { width: auto; min-height: 40px; padding: 8px 22px; margin: 0 auto; font-size: 15px; }
 
 .confirm-bar {
-  background: rgba(12, 22, 28, 0.92);
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 20;
+  background: rgba(12, 22, 28, 0.96);
   border: 1.5px solid var(--gold);
   border-radius: 14px;
   padding: 10px 12px;
-  margin: 0 0 8px;
+  margin: 0;
   text-align: center;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
 }
 .confirm-bar p {
   margin: 0 0 8px;
