@@ -57,3 +57,27 @@ test("lobby keeps the room code and start actions outside the scrolling list", (
   assert.ok(hero > 0 && scroll > hero, "room code should stay pinned above the scrolling list");
   assert.ok(actions > scroll, "start / ready actions should stay after the list");
 });
+
+test("the table uses the full wrap and seats sit near the outer edge", () => {
+  const table = block(css, ".circle-table");
+  assert.match(table, /width:\s*100%/);
+  assert.match(table, /height:\s*100%/);
+  assert.doesNotMatch(table, /aspect-ratio:\s*1\s*\/\s*1/);
+  const fn = js.slice(js.indexOf("function seatRadii"), js.indexOf("function seatRadii") + 400);
+  assert.match(fn, /rx:\s*45/);
+  assert.match(fn, /ry:\s*40/);
+});
+
+test("played cards stay on the rim and cues stay off the felt", () => {
+  assert.match(css, /--card-in/);
+  const card = block(css, ".seat-card");
+  assert.match(card, /var\(--card-in\)/);
+  assert.doesNotMatch(card, /translateY\(-5[08]px\)/);
+  const feltIdx = js.indexOf("table-felt felt-rich");
+  const feltLine = js.slice(feltIdx, feltIdx + 220);
+  assert.doesNotMatch(feltLine, /lastTrickCueHTML/);
+  assert.match(js, /function tableCuesRowHTML/);
+  assert.match(js, /function midTrickCueHTML/);
+  assert.match(css, /\.table-cues-row/);
+  assert.match(css, /\.seat\.place-top/);
+});

@@ -478,7 +478,7 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   min-height: 148px;
   max-height: none;
   margin: 2px 0 0;
-  padding: 2px 2px 48px;
+  padding: 8px 4px 52px;
   container-type: size;
   display: grid;
   place-items: center;
@@ -486,18 +486,18 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
 }
 .circle-table {
   position: relative;
-  width: min(100cqi, 100cqh);
-  aspect-ratio: 1 / 1;
-  height: auto;
+  width: 100%;
+  height: 100%;
   max-width: 100%;
   overflow: visible;
+  --card-in: clamp(28px, 13cqh, 48px);
 }
 .table-felt {
   position: absolute;
-  left: 11%;
-  right: 11%;
-  top: 12%;
-  bottom: 20%;
+  left: 18%;
+  right: 18%;
+  top: 20%;
+  bottom: 24%;
   border-radius: 50%;
   background:
     radial-gradient(ellipse at 50% 38%, #1e5a42 0%, #134533 48%, #0c2c22 100%);
@@ -551,13 +551,15 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  z-index: 1;
+  z-index: 3;
   text-align: center;
   font-size: 12px;
   color: rgba(250, 224, 148, 0.9);
   font-weight: 700;
   line-height: 1.4;
-  max-width: 54%;
+  max-width: 44%;
+  padding: 4px 8px;
+  border-radius: 999px;
   pointer-events: none;
 }
 .table-center.dim { color: rgba(255, 255, 255, 0.45); font-weight: 600; }
@@ -765,9 +767,10 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   position: absolute;
   left: 50%;
   top: 50%;
-  transform: translate(-50%, -50%) rotate(var(--rot, 0deg)) translateY(-58px) rotate(calc(-1 * var(--rot, 0deg)));
+  transform: translate(-50%, -50%) rotate(var(--rot, 0deg)) translateY(calc(-1 * var(--card-in))) rotate(calc(-1 * var(--rot, 0deg)));
   pointer-events: auto;
   cursor: pointer;
+  z-index: 4;
   background: none;
   border: 0;
   padding: 0;
@@ -824,13 +827,21 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   background: rgba(0, 0, 0, 0.12);
 }
 .circle-table.n-5 .seat, .circle-table.n-6 .seat { width: 78px; }
-.circle-table.n-5 .seat-card, .circle-table.n-6 .seat-card {
-  transform: translate(-50%, -50%) rotate(var(--rot, 0deg)) translateY(-50px) rotate(calc(-1 * var(--rot, 0deg)));
-}
+.circle-table.n-5, .circle-table.n-6 { --card-in: clamp(26px, 12cqh, 42px); }
 .circle-table.n-5 .seat-card .sk-card,
 .circle-table.n-6 .seat-card .sk-card,
 .circle-table.n-5 .card-slot,
-.circle-table.n-6 .card-slot { width: 46px; }
+.circle-table.n-6 .card-slot { width: 44px; }
+.seat.place-top .seat-info {
+  flex-direction: column-reverse;
+  transform: translateY(-6px);
+}
+.seat.place-top .avatar { margin-bottom: 0; margin-top: 2px; }
+.seat.place-bottom .seat-info { transform: translateY(6px); }
+.seat.place-left .seat-info { transform: translateX(-10px); }
+.seat.place-right .seat-info { transform: translateX(10px); }
+.seat.place-left { width: 86px; }
+.seat.place-right { width: 86px; }
 
 .opponents {
   display: flex;
@@ -1350,12 +1361,8 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   .brand-cover img { max-height: min(24svh, 200px); }
   .seat { width: 102px; }
   .seat-card .sk-card, .card-slot { width: 60px; }
-  .seat-card {
-    transform: translate(-50%, -50%) rotate(var(--rot, 0deg)) translateY(-64px) rotate(calc(-1 * var(--rot, 0deg)));
-  }
-  .circle-table.n-5 .seat-card, .circle-table.n-6 .seat-card {
-    transform: translate(-50%, -50%) rotate(var(--rot, 0deg)) translateY(-52px) rotate(calc(-1 * var(--rot, 0deg)));
-  }
+  .circle-table { --card-in: clamp(36px, 14cqh, 64px); }
+  .circle-table.n-5, .circle-table.n-6 { --card-in: clamp(32px, 13cqh, 52px); }
   .circle-table.n-5 .seat-card .sk-card,
   .circle-table.n-6 .seat-card .sk-card,
   .circle-table.n-5 .card-slot,
@@ -1468,25 +1475,12 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   z-index: 12;
 }
 .seat-card.flown-win {
-  transform: translate(var(--fly-dx, 0px), var(--fly-dy, 0px)) translate(-50%, -50%) rotate(var(--rot, 0deg)) translateY(-58px) rotate(calc(-1 * var(--rot, 0deg)));
+  transform: translate(var(--fly-dx, 0px), var(--fly-dy, 0px)) translate(-50%, -50%) rotate(var(--rot, 0deg)) translateY(calc(-1 * var(--card-in))) rotate(calc(-1 * var(--rot, 0deg)));
   z-index: 12;
 }
 @keyframes fly-to-winner {
   to {
-    transform: translate(var(--fly-dx, 0px), var(--fly-dy, 0px)) translate(-50%, -50%) rotate(var(--rot, 0deg)) translateY(-58px) rotate(calc(-1 * var(--rot, 0deg)));
-  }
-}
-.circle-table.n-5 .seat-card.fly-win,
-.circle-table.n-6 .seat-card.fly-win {
-  animation-name: fly-to-winner-tight;
-}
-.circle-table.n-5 .seat-card.flown-win,
-.circle-table.n-6 .seat-card.flown-win {
-  transform: translate(var(--fly-dx, 0px), var(--fly-dy, 0px)) translate(-50%, -50%) rotate(var(--rot, 0deg)) translateY(-50px) rotate(calc(-1 * var(--rot, 0deg)));
-}
-@keyframes fly-to-winner-tight {
-  to {
-    transform: translate(var(--fly-dx, 0px), var(--fly-dy, 0px)) translate(-50%, -50%) rotate(var(--rot, 0deg)) translateY(-50px) rotate(calc(-1 * var(--rot, 0deg)));
+    transform: translate(var(--fly-dx, 0px), var(--fly-dy, 0px)) translate(-50%, -50%) rotate(var(--rot, 0deg)) translateY(calc(-1 * var(--card-in))) rotate(calc(-1 * var(--rot, 0deg)));
   }
 }
 
@@ -1701,14 +1695,14 @@ button, a, .btn, .btn-text, .sk-play, .sk-wrap, .seat-card, .code, input, .bid-g
 .join-row .btn { width: auto; min-height: 48px; padding: 8px 12px; flex-shrink: 0; }
 
 .table-center.lead {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
   color: #fff4c4;
-  background: rgba(8, 16, 28, 0.72);
+  background: rgba(8, 16, 28, 0.82);
   border: 1px solid rgba(237, 191, 89, 0.55);
   border-radius: 999px;
   padding: 5px 10px;
-  max-width: 72%;
+  max-width: 44%;
   line-height: 1.25;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
 }
@@ -1911,21 +1905,19 @@ button, a, .btn, .btn-text, .sk-play, .sk-wrap, .seat-card, .code, input, .bid-g
 }
 
 .last-trick-cue {
-  position: absolute;
-  left: 50%;
-  top: 9%;
-  transform: translateX(-50%);
-  z-index: 12;
+  position: static;
+  transform: none;
+  z-index: 5;
   pointer-events: none;
-  font-size: clamp(13px, 4.4cqw, 16px);
+  font-size: 13px;
   font-weight: 800;
   letter-spacing: 0.08em;
   color: #1a1206;
   background: linear-gradient(180deg, #ffe7a0, var(--gold));
   border-radius: 999px;
-  padding: 5px 12px;
+  padding: 4px 12px;
   white-space: nowrap;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4), 0 0 0 2px rgba(255, 244, 196, 0.45);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35), 0 0 0 2px rgba(255, 244, 196, 0.45);
 }
 
 .trick-caption {
@@ -2346,5 +2338,39 @@ body.dragging-card { cursor: grabbing; }
   .a2hs-tip { display: none; }
   .footer-note { display: none; }
   .bid-grid button { min-height: 44px; }
-  .circle-wrap { padding-bottom: 40px; }
+  .circle-wrap { padding: 6px 2px 48px; }
 }
+
+/* Spread seats and cards into the unused ring around the felt */
+.table-cues-row {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 8px 4px;
+  min-height: 0;
+}
+.table-status-chip {
+  font-size: 13px;
+  font-weight: 800;
+  color: #fff4c4;
+  background: rgba(8, 16, 28, 0.82);
+  border: 1px solid rgba(237, 191, 89, 0.55);
+  border-radius: 999px;
+  padding: 4px 12px;
+  line-height: 1.25;
+  text-align: center;
+  max-width: 100%;
+}
+.table-status-chip.void-soon {
+  color: #ffd0c0;
+  border-color: rgba(255, 138, 106, 0.7);
+}
+.table-status-chip.dim {
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 700;
+}
+.seat-info { z-index: 5; }
+.seat-card { isolation: isolate; }

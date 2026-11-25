@@ -979,6 +979,45 @@ function lastTrickCueHTML(v) {
   return `<div class="last-trick-cue" role="status">最後一墩</div>`;
 }
 
+function seatRadii(n) {
+  if (n <= 2) return { rx: 0, ry: 38 };
+  if (n === 3) return { rx: 40, ry: 38 };
+  if (n === 4) return { rx: 42, ry: 39 };
+  if (n === 5) return { rx: 43, ry: 40 };
+  return { rx: 45, ry: 40 };
+}
+
+function seatPlace(angleDeg) {
+  const a = ((angleDeg % 360) + 360) % 360;
+  if (a >= 45 && a < 135) return "bottom";
+  if (a >= 135 && a < 225) return "left";
+  if (a >= 225 && a < 315) return "top";
+  return "right";
+}
+
+function midTrickCueHTML(v) {
+  if (!v) return "";
+  const mid = (v.phase === "playing" || v.phase === "choosingTigress") && (v.trick || []).length;
+  if (!mid) return "";
+  const lead = v.currentTrickLead;
+  if (lead?.destroyed) return `<div class="table-status-chip void-soon" role="status">呢墩快將作廢</div>`;
+  if (lead && lead.leading === false) return `<div class="table-status-chip dim" role="status">尚未有人領先</div>`;
+  if (lead && (lead.playerName || lead.cardLabel)) {
+    const who = escapeHtml(lead.playerName || "");
+    const card = escapeHtml(lead.cardLabel || "");
+    const label = who && card ? `${who} · ${card}` : (who || card);
+    return `<div class="table-status-chip" role="status">而家最大：${label}</div>`;
+  }
+  return "";
+}
+
+function tableCuesRowHTML(v) {
+  const last = lastTrickCueHTML(v);
+  const mid = midTrickCueHTML(v);
+  if (!last && !mid) return "";
+  return `<div class="table-cues-row">${last}${mid}</div>`;
+}
+
 function submitLobbyName() {
   const v = state.view;
   if (!v || v.phase !== "lobby") return;
@@ -2258,8 +2297,7 @@ function circleTableHTML(v) {
   const bidding = v.phase === "bidding";
   const destroyed = v.phase === "trickResult" && v.lastTrickDestroyed;
   const trickByPlayer = new Map((v.trick || []).map((played) => [played.playerIndex, played]));
-  const rx = n === 2 ? 0 : n >= 6 ? 36 : 37;
-  const ry = n === 2 ? 30 : n >= 5 ? 30 : 31;
+  const { rx, ry } = seatRadii(n);
 
   const showSlots = v.phase === "playing" || v.phase === "choosingTigress" || v.phase === "trickResult";
   syncTrickAnim(v);
@@ -2271,6 +2309,7 @@ function circleTableHTML(v) {
     const x = 50 + Math.cos(rad) * rx;
     const y = 50 + Math.sin(rad) * ry;
     const rot = i * (360 / n);
+    const place = seatPlace(angleDeg);
     const played = trickByPlayer.get(playerIndex);
     let arriveFlag = false;
     const thinking = isPlayerThinking(p, v);
@@ -2307,7 +2346,7 @@ function circleTableHTML(v) {
     const bustCls = bidLine.busted ? " busted" : "";
     const boomCls = bidLine.explode ? " bust-explode" : "";
     const z = bidLine.explode ? 8 : win ? 7 : thinking ? 6 : 2;
-    return `<div class="seat ${thinking ? "thinking" : ""} ${isMe ? "is-me" : ""} ${win ? "winner" : ""}${celebrate}${arrive}${bustCls}${boomCls} ${p.isAI ? "ai-seat" : ""}"
+    return `<div class="seat place-${place} ${thinking ? "thinking" : ""} ${isMe ? "is-me" : ""} ${win ? "winner" : ""}${celebrate}${arrive}${bustCls}${boomCls} ${p.isAI ? "ai-seat" : ""}"
       style="left:${x.toFixed(2)}%;top:${y.toFixed(2)}%;--rot:${rot}deg;z-index:${z}">
       ${card}
       ${bidLine.explode ? `<div class="bust-burst" aria-hidden="true"></div>` : ""}
@@ -2332,27 +2371,19 @@ function circleTableHTML(v) {
 
   let center = "";
   const caption = trickCaptionHTML(v);
-  const midTrick = (v.phase === "playing" || v.phase === "choosingTigress") && (v.trick || []).length;
-  const lead = midTrick ? v.currentTrickLead : null;
+  const hasCards = (v.trick || []).length > 0;
   if (caption) center = caption;
   else if (destroyed) center = `<div class="table-center void">呢墩作廢，無人贏</div>`;
-  else if (!(v.trick || []).length && bidding) center = `<div class="table-center dim">叫牌中<br /><span class="arrow-hint">順時針出牌</span></div>`;
-  else if (!(v.trick || []).length) center = `<div class="table-center dim">呢墩尚未出牌<br /><span class="arrow-hint">順時針出牌</span></div>`;
-  else if (lead?.destroyed) center = `<div class="table-center lead void-soon">呢墩快將作廢</div>`;
-  else if (lead && lead.leading === false) center = `<div class="table-center lead dim">尚未有人領先</div>`;
-  else if (lead && (lead.playerName || lead.cardLabel)) {
-    const who = escapeHtml(lead.playerName || "");
-    const card = escapeHtml(lead.cardLabel || "");
-    const label = who && card ? `${who} · ${card}` : (who || card);
-    center = `<div class="table-center lead">而家最大：${label}</div>`;
-  } else center = `<div class="table-center dim"><span class="arrow-hint">順時針</span></div>`;
+  else if (!hasCards && bidding) center = `<div class="table-center dim">叫牌中<br /><span class="arrow-hint">順時針出牌</span></div>`;
+  else if (!hasCards) center = `<div class="table-center dim">呢墩尚未出牌<br /><span class="arrow-hint">順時針出牌</span></div>`;
+  else center = `<div class="table-center dim"><span class="arrow-hint">順時針</span></div>`;
 
   const suitClass = v.ledSuit && (v.phase === "playing" || v.phase === "choosingTigress" || v.phase === "trickResult")
     ? ` suit-${v.ledSuit}`
     : "";
   return `<div class="circle-wrap">
     <div class="circle-table n-${n} ${destroyed ? "destroyed" : ""}" role="group" aria-label="牌桌，出牌順序順時針">
-      <div class="table-felt felt-rich${suitClass}">${tableArrowsSVG()}${lastTrickCueHTML(v)}${center}${flourishBannerHTML()}</div>
+      <div class="table-felt felt-rich${suitClass}">${tableArrowsSVG()}${center}${flourishBannerHTML()}</div>
       ${seats}
     </div>
   </div>`;
@@ -2674,6 +2705,7 @@ function renderTable() {
         </div>
       </div>
       ${bidTotalChipHTML(v)}
+      ${tableCuesRowHTML(v)}
       ${circleTableHTML(v)}
       <div class="table-dock">
         ${prevTrickButtonHTML(v)}
