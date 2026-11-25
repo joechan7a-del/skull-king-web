@@ -77,6 +77,7 @@ const state = {
   rotateDismissed: false,
   winBuzzKey: "",
   trickLogPeek: false,
+  handCollapsed: false,
 };
 
 const app = document.getElementById("app");
@@ -188,6 +189,17 @@ function playSound(key) {
 
 function playCardFlip() { playSound("flip"); }
 function playUiClick() { playSound("click"); }
+
+function playDealFlutter(count) {
+  const n = Math.max(1, Math.min(Number(count) || 1, 6));
+  if (prefersReducedMotion()) {
+    playCardFlip();
+    return;
+  }
+  for (let i = 0; i < n; i++) {
+    setTimeout(() => playCardFlip(), i * 72);
+  }
+}
 
 function playTurnChime() {
   try {
@@ -539,6 +551,18 @@ function haptic(ms = 12) {
   try { navigator.vibrate?.(ms); } catch { /* not supported */ }
 }
 
+function connChipHTML() {
+  const map = {
+    open: ["ok", "已連線"],
+    reconnecting: ["wait", "重連緊"],
+    connecting: ["wait", "連線緊"],
+    closed: ["down", "已斷線"],
+    idle: ["wait", "連線緊"],
+  };
+  const [cls, label] = map[state.conn] || ["wait", "連線緊"];
+  return "<span class=\"conn-chip " + cls + "\" role=\"status\">" + label + "</span>";
+}
+
 function muteToggleHTML() {
   const muted = !!state.muted;
   const label = muted ? "開聲" : "靜音";
@@ -715,6 +739,127 @@ function dismissSheet(act) {
 }
 
 let suppressSheetClickUntil = 0;
+let suppressPlayClickUntil = 0;
+
+function syncKeyboardInset() {
+  const vv = window.visualViewport;
+  const inset = vv ? Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) : 0;
+  document.documentElement.style.setProperty("--kb", inset + "px");
+  const el = document.activeElement;
+  if (inset > 40 && el && (el.id === "name-input" || el.id === "lobby-name-input" || el.id === "code-input" || el.classList?.contains("code-box"))) {
+    try { el.scrollIntoView({ block: "center", behavior: "smooth" }); } catch { /* ignore */ }
+  }
+}
+
+function bindKeyboardInset() {
+  if (bindKeyboardInset.done) return;
+  bindKeyboardInset.done = true;
+  const vv = window.visualViewport;
+  if (vv) {
+    vv.addEventListener("resize", syncKeyboardInset);
+    vv.addEventListener("scroll", syncKeyboardInset);
+  }
+  window.addEventListener("focusin", syncKeyboardInset);
+  window.addEventListener("focusout", () => setTimeout(syncKeyboardInset, 50));
+  syncKeyboardInset();
+}
+
+function confirmSelectedPlay() {
+  const view = state.view;
+  if (!state.selectedCardId || !view) return false;
+  const card = (view.myHand || []).find((c) => c.id === state.selectedCardId);
+  if (!card) return false;
+  if (card.special === "tigress") {
+    render();
+    return true;
+  }
+  const id = state.selectedCardId;
+  state.selectedCardId = null;
+  state.inspect = null;
+  haptic(18);
+  send({ type: "play", cardId: id });
+  return true;
+}
+
+function bindCardDrag() {
+  if (state.screen !== "play") return;
+  const table = app.querySelector(".table-felt, .circle-table");
+  app.querySelectorAll(".hand .sk-wrap.playable .sk-play").forEach((btn) => {
+    btn.addEventListener("pointerdown", (e) => {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      const wrap = btn.closest(".sk-wrap");
+      const id = btn.dataset.id || wrap?.querySelector("[data-id]")?.dataset.id;
+      if (!id) return;
+      const startX = e.clientX;
+      const startY = e.clientY;
+      let dragging = false;
+      let ghost = null;
+      const pointerId = e.pointerId;
+      const overTable = (x, y) => {
+        if (!table) return false;
+        const r = table.getBoundingClientRect();
+        return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+      };
+      const cleanup = () => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onUp);
+        table?.classList.remove("drop-ready", "drag-target");
+        document.body.classList.remove("dragging-card");
+        ghost?.remove();
+      };
+      const onMove = (ev) => {
+        if (ev.pointerId !== pointerId) return;
+        const dx = ev.clientX - startX;
+        const dy = ev.clientY - startY;
+        if (!dragging) {
+          if (Math.hypot(dx, dy) < 16) return;
+          if (Math.abs(dx) > Math.abs(dy) + 8) {
+            cleanup();
+            return;
+          }
+          dragging = true;
+          state.longPressFired = true;
+          const cardEl = wrap.querySelector(".sk-card");
+          ghost = (cardEl || wrap).cloneNode(true);
+          ghost.classList.add("drag-ghost");
+          ghost.style.left = ev.clientX + "px";
+          ghost.style.top = ev.clientY + "px";
+          document.body.appendChild(ghost);
+          document.body.classList.add("dragging-card");
+          table?.classList.add("drag-target");
+          haptic(8);
+          ev.preventDefault();
+        }
+        if (ghost) {
+          ghost.style.left = ev.clientX + "px";
+          ghost.style.top = ev.clientY + "px";
+        }
+        table?.classList.toggle("drop-ready", overTable(ev.clientX, ev.clientY));
+      };
+      const onUp = (ev) => {
+        if (ev.pointerId !== pointerId) return;
+        const dropped = dragging && overTable(ev.clientX, ev.clientY);
+        cleanup();
+        if (!dragging) return;
+        suppressPlayClickUntil = performance.now() + 450;
+        if (!dropped) return;
+        const view = state.view;
+        const legal = new Set(view?.legalCardIds || []);
+        if (view?.phase === "playing" && view?.isMyTurn && legal.has(id)) {
+          state.selectedCardId = id;
+          state.inspect = null;
+          playCardFlip();
+          confirmSelectedPlay();
+        }
+      };
+      window.addEventListener("pointermove", onMove, { passive: false });
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onUp);
+    });
+  });
+}
+
 
 function bindSheetSwipe() {
   app.querySelectorAll("[data-sheet-dismiss]").forEach((sheet) => {
@@ -1093,12 +1238,17 @@ function connect({ onOpen } = {}) {
   const ws = new WebSocket(wsUrl());
   state.ws = ws;
   ws.addEventListener("open", () => {
+    const wasReconnect = state.conn === "reconnecting";
     retryDelay = 600;
     state.conn = "open";
     state.error = "";
     const cb = onOpen || state._onOpen;
     state._onOpen = null;
     if (cb) cb();
+    if (wasReconnect && state.screen !== "home") {
+      showToast("連返啦，牌局繼續", { defer: true });
+      haptic(16);
+    }
     render();
   });
   ws.addEventListener("message", (ev) => {
@@ -1458,13 +1608,19 @@ function discardSavedGame() {
 // Event delegation
 app.addEventListener("pointerdown", () => { unlockAudio(); syncWakeLock(); }, { passive: true });
 app.addEventListener("click", (e) => {
-  if (performance.now() < suppressSheetClickUntil) {
+  if (performance.now() < suppressSheetClickUntil || performance.now() < suppressPlayClickUntil) {
     e.preventDefault();
     e.stopPropagation();
     return;
   }
   const t = e.target.closest("[data-act]");
-  if (!t) return;
+  if (!t) {
+    if (state.selectedCardId && e.target.closest(".table-felt, .circle-table") && !e.target.closest(".seat-card, button, a, input")) {
+      state.selectedCardId = null;
+      render();
+    }
+    return;
+  }
   // Only ignore backdrop taps that land inside the sheet; 知道喇 itself must still close.
   if (t.classList.contains("overlay") && e.target.closest("[data-stop]")) return;
   const act = t.dataset.act;
@@ -1541,7 +1697,7 @@ app.addEventListener("click", (e) => {
     return;
   }
   else if (act === "bid-edit-cancel") { state.editingBid = false; render(); return; }
-  else if (act === "bid-pick") { state.bidValue = Number(t.dataset.n); render(); }
+  else if (act === "bid-pick") { state.bidValue = Number(t.dataset.n); haptic(10); render(); }
   else if (act === "bid-submit") {
     if (state.bidValue == null) { setError("請先揀你叫幾多墩。"); return; }
     haptic(16);
@@ -1564,12 +1720,12 @@ app.addEventListener("click", (e) => {
     return;
   }
   else if (act === "confirm-play") {
-    if (!state.selectedCardId) return;
-    const id = state.selectedCardId;
-    state.selectedCardId = null;
-    state.inspect = null;
-    haptic(18);
-    send({ type: "play", cardId: id });
+    confirmSelectedPlay();
+  }
+  else if (act === "toggle-hand") {
+    state.handCollapsed = !state.handCollapsed;
+    render();
+    return;
   }
   else if (act === "confirm-tig-pirate") {
     if (!state.selectedCardId) return;
@@ -1835,7 +1991,7 @@ function renderLobby() {
       <div class="topbar">
         <button class="btn-text" data-act="leave">離開</button>
         <h2>大廳</h2>
-        <div class="topbar-right">${muteToggleHTML()}<button class="btn-text" data-act="rules">規則</button></div>
+        <div class="topbar-right">${connChipHTML()}${muteToggleHTML()}<button class="btn-text" data-act="rules">規則</button></div>
       </div>
       <div class="code-hero">
         <div class="label">房號 · 撳下去出示俾朋友</div>
@@ -2107,6 +2263,7 @@ function circleTableHTML(v) {
     const y = 50 + Math.sin(rad) * ry;
     const rot = i * (360 / n);
     const played = trickByPlayer.get(playerIndex);
+    let arriveFlag = false;
     const thinking = isPlayerThinking(p, v);
     const isMe = p.id === v.yourId;
     const win = v.phase === "trickResult" && !destroyed && playerIndex === v.lastWinnerIndex;
@@ -2123,8 +2280,12 @@ function circleTableHTML(v) {
     let card = "";
     if (played) {
       const justPlayed = isJustPlayed(played.card.id);
-      if (justPlayed) maybeSpecialFlourish(played);
+      if (justPlayed) {
+        maybeSpecialFlourish(played);
+        if (!isMe) haptic(10);
+      }
       const slam = justPlayed ? " slam" : "";
+      if (justPlayed && !isMe) arriveFlag = true;
       card = `<button class="seat-card ${win ? "winner" : ""} ${destroyed ? "voided" : ""}${slam}" data-act="inspect" data-id="${escapeHtml(played.card.id)}" aria-label="睇呢張牌">
            ${cardFaceHTML(played.card, { tigressAsPirate: played.tigressAsPirate, compact: true })}
            ${win ? `<div class="seat-win">贏</div>` : ""}
@@ -2132,11 +2293,12 @@ function circleTableHTML(v) {
     } else if (showSlots) {
       card = `<div class="seat-card empty"><div class="card-slot" aria-hidden="true"></div></div>`;
     }
+    const arrive = arriveFlag ? " seat-arrive" : "";
     const celebrate = win ? " winner-celebrate" : "";
     const bustCls = bidLine.busted ? " busted" : "";
     const boomCls = bidLine.explode ? " bust-explode" : "";
     const z = bidLine.explode ? 8 : win ? 7 : thinking ? 6 : 2;
-    return `<div class="seat ${thinking ? "thinking" : ""} ${isMe ? "is-me" : ""} ${win ? "winner" : ""}${celebrate}${bustCls}${boomCls} ${p.isAI ? "ai-seat" : ""}"
+    return `<div class="seat ${thinking ? "thinking" : ""} ${isMe ? "is-me" : ""} ${win ? "winner" : ""}${celebrate}${arrive}${bustCls}${boomCls} ${p.isAI ? "ai-seat" : ""}"
       style="left:${x.toFixed(2)}%;top:${y.toFixed(2)}%;--rot:${rot}deg;z-index:${z}">
       ${card}
       ${bidLine.explode ? `<div class="bust-burst" aria-hidden="true"></div>` : ""}
@@ -2411,7 +2573,7 @@ function renderTable() {
       if (v.phase === "bidding") {
         state.dealingKey = dealKey;
         state.dealStartedAt = performance.now();
-        playCardFlip();
+        playDealFlutter(handCards.length);
         dealing = true;
       } else {
         state.dealingKey = "";
@@ -2427,7 +2589,15 @@ function renderTable() {
       }
     }
   }
-  const hand = `<div class="hand-scroll"><div class="hand${dealing ? " dealing" : ""}">${handCards
+  const canBidNow = bidding && !(alreadyBid && !state.editingBid);
+  if (state.handCollapsed && ((canPlay && v.phase === "playing") || canBidNow)) {
+    state.handCollapsed = false;
+  }
+  const handTray = `<div class="hand-tray">
+    <div class="hand-count">手牌 ${handCards.length} 張</div>
+    <button type="button" class="btn-text" data-act="toggle-hand">${state.handCollapsed ? "顯示手牌" : "收起手牌 · 睇晒張枱"}</button>
+  </div>`;
+  const hand = `<div class="hand-scroll${state.handCollapsed ? " is-collapsed" : ""}"><div class="hand${dealing ? " dealing" : ""}">${handCards
     .map((c, i) => {
       const isLegal = canPlay && legal.has(c.id);
       const dim = canPlay && !legal.has(c.id);
@@ -2476,6 +2646,7 @@ function renderTable() {
         <div class="header-left">
           <button class="btn-text" data-act="leave">離開</button>
           ${muteToggleHTML()}
+          ${connChipHTML()}
         </div>
         <div class="center">
           <div class="round">第 ${v.round} 局／10</div>
@@ -2503,6 +2674,7 @@ function renderTable() {
         ${bidPanel}
         ${confirmBar}
         ${myBidTrackHTML(v)}
+        ${handTray}
         ${hand}
       </div>
     </div>
@@ -2657,14 +2829,20 @@ function renderRules() {
 
 function render() {
   const screen = state.screen;
+  const prevScreen = app.dataset.screen || "";
   let html;
   if (screen === "rules") html = renderRules();
   else if (screen === "lobby") html = renderLobby();
   else if (screen === "play") html = renderTable();
   else html = renderHome();
   app.innerHTML = rotateHintHTML() + html;
+  app.dataset.screen = screen;
+  if (prevScreen && prevScreen !== screen) {
+    app.querySelector(".screen")?.classList.add("screen-in");
+  }
   if (screen === "play") applyFlyAnim(state.view);
   bindCardLongPress();
+  bindCardDrag();
   bindCodeBoxes();
   bindSheetSwipe();
   scrollPlayableIntoView();
@@ -2681,6 +2859,7 @@ async function boot() {
     // offline until ws connects
   }
   if (pathCode()) state.joinCode = pathCode();
+  bindKeyboardInset();
   render();
   tryResume();
 }
