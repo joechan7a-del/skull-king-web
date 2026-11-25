@@ -24,8 +24,15 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="manifest" href="/site.webmanifest?v=c7" />
-    <link rel="stylesheet" href="/styles.css?v=c7" />
+    <link rel="manifest" href="/site.webmanifest?v=c8" />
+    <link rel="stylesheet" href="/styles.css?v=c8" />
+    <script>
+      (function () {
+        var v = window.visualViewport;
+        var h = Math.round((v && v.height) || window.innerHeight);
+        document.documentElement.style.setProperty("--vvh", h + "px");
+      })();
+    </script>
   </head>
   <body>
     <div id="app">
@@ -35,6 +42,6 @@
         <p>準備開場…</p>
       </div>
     </div>
-    <script type="module" src="/app.js?v=c7"></script>
+    <script type="module" src="/app.js?v=c8"></script>
   </body>
 </html>

@@ -741,27 +741,36 @@ function dismissSheet(act) {
 let suppressSheetClickUntil = 0;
 let suppressPlayClickUntil = 0;
 
-function syncKeyboardInset() {
+function syncViewportFrame() {
   const vv = window.visualViewport;
-  const inset = vv ? Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) : 0;
-  document.documentElement.style.setProperty("--kb", inset + "px");
+  const h = Math.round(vv?.height || window.innerHeight);
+  const w = Math.round(vv?.width || window.innerWidth);
+  const root = document.documentElement;
+  root.style.setProperty("--vvh", `${h}px`);
+  root.style.setProperty("--vvw", `${w}px`);
+  const inset = vv ? Math.max(0, Math.round(window.innerHeight - vv.height - (vv.offsetTop || 0))) : 0;
+  root.style.setProperty("--kb", inset + "px");
   const el = document.activeElement;
   if (inset > 40 && el && (el.id === "name-input" || el.id === "lobby-name-input" || el.id === "code-input" || el.classList?.contains("code-box"))) {
-    try { el.scrollIntoView({ block: "center", behavior: "smooth" }); } catch { /* ignore */ }
+    try { el.scrollIntoView({ block: "nearest", behavior: "smooth" }); } catch { /* ignore */ }
   }
 }
+
+function syncKeyboardInset() { syncViewportFrame(); }
 
 function bindKeyboardInset() {
   if (bindKeyboardInset.done) return;
   bindKeyboardInset.done = true;
   const vv = window.visualViewport;
   if (vv) {
-    vv.addEventListener("resize", syncKeyboardInset);
-    vv.addEventListener("scroll", syncKeyboardInset);
+    vv.addEventListener("resize", syncViewportFrame);
+    vv.addEventListener("scroll", syncViewportFrame);
   }
-  window.addEventListener("focusin", syncKeyboardInset);
-  window.addEventListener("focusout", () => setTimeout(syncKeyboardInset, 50));
-  syncKeyboardInset();
+  window.addEventListener("resize", syncViewportFrame);
+  window.addEventListener("orientationchange", () => setTimeout(syncViewportFrame, 80));
+  window.addEventListener("focusin", syncViewportFrame);
+  window.addEventListener("focusout", () => setTimeout(syncViewportFrame, 50));
+  syncViewportFrame();
 }
 
 function confirmSelectedPlay() {
@@ -1931,14 +1940,14 @@ function renderHome() {
       <div class="home-card">
         <label class="field-label" for="name-input">你嘅名</label>
         <input id="name-input" maxlength="12" placeholder="你（唔填就叫「你」）" value="${escapeHtml(state.name)}" autocomplete="nickname" />
-        <div style="height:14px"></div>
+        <div class="home-gap"></div>
         <button class="btn btn-gold" data-act="create">開房</button>
         <div class="or-row">或者加入</div>
         ${codeBoxesHTML(prefill)}
         <p class="home-hint">開房之後把房號或連結傳俾朋友，佢哋輸入同一個號就可以一齊玩。第一次玩可以先睇遊戲規則。</p>
         <div class="error-line">${escapeHtml(state.error)}</div>
       </div>
-      <div>
+      <div class="home-foot">
         <button class="btn-text" data-act="rules">遊戲規則</button>
         <div class="footer-note">基本規則 · 八爪魚同白鯨 · 10 局 · 暫時唔包括贓物牌</div>
         ${location.hostname === "localhost" || location.hostname === "127.0.0.1" ? lan : ""}
@@ -1987,7 +1996,6 @@ function renderLobby() {
   return `
     ${bannerHTML()}
     <div class="screen lobby-screen">
-      <div class="lobby-scroll">
       <div class="topbar">
         <button class="btn-text" data-act="leave">離開</button>
         <h2>大廳</h2>
@@ -2006,6 +2014,7 @@ function renderLobby() {
         </div>
         <div class="share-url">${escapeHtml(shareUrl(v.code))}</div>
       </div>
+      <div class="lobby-scroll">
       ${host ? `
         <div class="panel">
           <h3>桌子設定</h3>
