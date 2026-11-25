@@ -359,7 +359,9 @@ function renderHome() {
     ${bannerHTML()}
     <div class="screen home">
       <div class="brand">
-        <div class="brand-mark">${iconSVG("skullKing")}</div>
+        <div class="brand-cover">
+          <img src="/cover.jpg" width="858" height="1200" alt="One Piece Skull King 封面" />
+        </div>
         <h1>骷髏王</h1>
         <div class="en">Skull King</div>
       </div>
@@ -485,47 +487,112 @@ function signed(n) {
   return String(n);
 }
 
+
+function playerSeatStatus(p, v) {
+  const bidding = v.phase === "bidding";
+  let st;
+  if (bidding) st = p.hasBid ? "已叫牌" : "考慮緊…";
+  else if (v.bidsRevealed) st = `叫 ${p.bid} · 贏 ${p.tricksWon}`;
+  else st = `${p.handCount} 張`;
+  if (!p.isAI && v.lobbyPlayers) {
+    const h = v.lobbyPlayers.find((x) => x.id === p.id);
+    if (h && !h.connected) st = "已斷線";
+  }
+  return st;
+}
+
+function isPlayerThinking(p, v) {
+  if (v.phase === "bidding") return !p.hasBid;
+  return !!p.isTurn;
+}
+
+function tableArrowsSVG() {
+  const cx = 50;
+  const cy = 50;
+  const rx = 41;
+  const ry = 37;
+  const n = 8;
+  const heads = [];
+  for (let i = 0; i < n; i++) {
+    const t = (i + 0.5) / n;
+    const a = (90 + t * 360) * Math.PI / 180;
+    const x = cx + rx * Math.cos(a);
+    const y = cy + ry * Math.sin(a);
+    const rot = Math.atan2(ry * Math.cos(a), -rx * Math.sin(a)) * 180 / Math.PI;
+    heads.push(
+      `<polygon points="0,0 -3.4,-2 -3.4,2" transform="translate(${x.toFixed(2)} ${y.toFixed(2)}) rotate(${rot.toFixed(2)})" />`,
+    );
+  }
+  return `<svg class="table-arrows" viewBox="0 0 100 100" aria-hidden="true">
+    <ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="none" stroke="rgba(237,191,89,0.55)" stroke-width="0.85" />
+    <g fill="#edbf59">${heads.join("")}</g>
+  </svg>`;
+}
+
+function circleTableHTML(v) {
+  const players = v.players || [];
+  const n = Math.max(players.length, 1);
+  const found = players.findIndex((p) => p.id === v.yourId);
+  const myIndex = found >= 0 ? found : 0;
+  const bidding = v.phase === "bidding";
+  const destroyed = v.phase === "trickResult" && v.lastTrickDestroyed;
+  const trickByPlayer = new Map((v.trick || []).map((played) => [played.playerIndex, played]));
+  const rx = n === 2 ? 0 : n >= 6 ? 39 : 40;
+  const ry = n === 2 ? 36 : n >= 5 ? 35 : 36;
+
+  const seats = players.map((_, i) => {
+    const playerIndex = (myIndex + i) % n;
+    const p = players[playerIndex];
+    const angleDeg = 90 + i * (360 / n);
+    const rad = (angleDeg * Math.PI) / 180;
+    const x = 50 + Math.cos(rad) * rx;
+    const y = 50 + Math.sin(rad) * ry;
+    const rot = i * (360 / n);
+    const played = trickByPlayer.get(playerIndex);
+    const thinking = isPlayerThinking(p, v);
+    const isMe = p.id === v.yourId;
+    const win = v.phase === "trickResult" && !destroyed && playerIndex === v.lastWinnerIndex;
+    const st = playerSeatStatus(p, v);
+    const card = played
+      ? `<div class="seat-card ${win ? "winner" : ""} ${destroyed ? "voided" : ""}">
+           ${cardFaceHTML(played.card, { tigressAsPirate: played.tigressAsPirate, compact: true })}
+           ${win ? `<div class="seat-win">贏</div>` : ""}
+         </div>`
+      : `<div class="seat-card empty"><div class="card-slot" aria-hidden="true"></div></div>`;
+    return `<div class="seat ${thinking ? "thinking" : ""} ${isMe ? "is-me" : ""} ${win ? "winner" : ""} ${p.isAI ? "ai-seat" : ""}"
+      style="left:${x.toFixed(2)}%;top:${y.toFixed(2)}%;--rot:${rot}deg;z-index:${thinking ? 6 : 2}">
+      ${card}
+      <div class="seat-info">
+        <div class="avatar ${thinking ? "gold" : p.isAI ? "ai" : ""}">${escapeHtml(p.name.slice(0, 1))}</div>
+        <div class="nm">${escapeHtml(p.name)}${isMe ? "（你）" : ""}</div>
+        <div class="st">${escapeHtml(st)}</div>
+        <div class="sc">${p.score} 分</div>
+        ${thinking ? `<div class="seat-thinking">諗緊</div>` : ""}
+      </div>
+    </div>`;
+  }).join("");
+
+  let center = "";
+  if (destroyed) center = `<div class="table-center void">呢墩作廢，無人贏</div>`;
+  else if (!(v.trick || []).length && bidding) center = `<div class="table-center dim">叫牌中<br /><span class="arrow-hint">順時針出牌</span></div>`;
+  else if (!(v.trick || []).length) center = `<div class="table-center dim">呢墩尚未出牌<br /><span class="arrow-hint">順時針出牌</span></div>`;
+  else center = `<div class="table-center dim"><span class="arrow-hint">順時針</span></div>`;
+
+  return `<div class="circle-wrap">
+    <div class="circle-table n-${n} ${destroyed ? "destroyed" : ""}" role="group" aria-label="牌桌，出牌順序順時針">
+      <div class="table-felt">${tableArrowsSVG()}${center}</div>
+      ${seats}
+    </div>
+  </div>`;
+}
+
 function renderTable() {
   const v = state.view;
   if (!v) return renderHome();
   const me = v.players?.find((p) => p.id === v.yourId);
-  const others = (v.players || []).filter((p) => p.id !== v.yourId);
   const bidding = v.phase === "bidding";
   const myBid = me?.bid;
   const alreadyBid = bidding && me?.hasBid;
-
-  const opp = others
-    .map((p) => {
-      let st;
-      if (bidding) st = p.hasBid ? "已叫牌" : "考慮緊…";
-      else if (v.bidsRevealed) st = `叫 ${p.bid} · 贏 ${p.tricksWon}`;
-      else st = `${p.handCount} 張`;
-      if (!p.isAI && v.lobbyPlayers) {
-        const h = v.lobbyPlayers.find((x) => x.id === p.id);
-        if (h && !h.connected) st = "已斷線";
-      }
-      return `<div class="opp ${p.isTurn ? "turn" : ""}">
-        <div class="avatar ${p.isTurn ? "gold" : p.isAI ? "ai" : ""}" style="margin:0 auto 4px">${escapeHtml(p.name.slice(0, 1))}</div>
-        <div class="nm">${escapeHtml(p.name)}</div>
-        <div class="st">${escapeHtml(st)}</div>
-        <div class="sc">${p.score} 分</div>
-      </div>`;
-    })
-    .join("");
-
-  const trickCards = v.trick || [];
-  const destroyed = v.phase === "trickResult" && v.lastTrickDestroyed;
-  const trick = trickCards.length
-    ? `<div class="trick-area-inner ${destroyed ? "destroyed" : ""}"><div class="trick-row">${trickCards
-        .map((p) => {
-          const win = v.phase === "trickResult" && !destroyed && p.playerIndex === v.lastWinnerIndex;
-          return `<div class="trick-item ${win ? "winner" : ""}">
-            ${cardFaceHTML(p.card, { tigressAsPirate: p.tigressAsPirate, compact: trickCards.length > 4 })}
-            <div class="who">${escapeHtml(p.playerName || "")}${win ? " · 贏" : ""}</div>
-          </div>`;
-        })
-        .join("")}</div>${destroyed ? `<div class="trick-void">呢墩作廢，無人贏</div>` : ""}</div>`
-    : `<div class="trick-empty">呢墩尚未出牌</div>`;
 
   let bidPanel = "";
   if (bidding) {
@@ -559,12 +626,6 @@ function renderTable() {
     })
     .join("")}</div>`;
 
-  const meDetail = !bidding && me && v.bidsRevealed
-    ? `<div class="detail">叫 ${me.bid} 墩 · 已贏 ${me.tricksWon}</div>`
-    : bidding && me?.hasBid
-      ? `<div class="detail">已叫 ${me.bid} 墩</div>`
-      : "";
-
   const skipTrick = v.phase === "trickResult"
     ? `<div style="text-align:center;margin-top:-4px"><button class="btn-text" data-act="continue">跳過動畫</button></div>`
     : "";
@@ -580,19 +641,11 @@ function renderTable() {
         </div>
         <button class="btn-text" data-act="rules">規則</button>
       </div>
-      <div class="opponents">${opp}</div>
-      <div class="trick-area">${trick}</div>
+      ${circleTableHTML(v)}
       <div class="status">${escapeHtml(v.statusMessage || "")}</div>
       ${skipTrick}
       <div class="error-line">${escapeHtml(state.error)}</div>
       ${bidPanel}
-      <div class="me-row">
-        <div>
-          <div class="who">${escapeHtml(me?.name || "你")}</div>
-          ${meDetail}
-        </div>
-        <div class="score">${me?.score ?? 0} 分</div>
-      </div>
       ${hand}
     </div>
     ${v.pendingTigress ? tigressHTML() : ""}
