@@ -921,22 +921,6 @@ function playWaitHTML(v) {
   return `<div class="play-wait" aria-live="polite">仲等：${names}</div>`;
 }
 
-function trickCaptionHTML(v) {
-  if (!v || v.phase !== "trickResult") return "";
-  maybeWinBuzz(v);
-  const meIndex = (v.players || []).findIndex((p) => p.id === v.yourId);
-  const mine = !v.lastTrickDestroyed && meIndex >= 0 && meIndex === v.lastWinnerIndex;
-  let text;
-  if (v.lastTrickDestroyed) text = "呢墩作廢";
-  else if (mine) text = "你贏咗呢墩";
-  else {
-    const winner = (v.players || [])[v.lastWinnerIndex];
-    text = `${winner?.name || "有人"}贏咗呢墩`;
-  }
-  const why = v.lastTrickExplanation ? `<span class="trick-why">${escapeHtml(v.lastTrickExplanation)}</span>` : "";
-  return `<div class="trick-caption sticky${v.lastTrickDestroyed ? " void" : ""}${mine ? " mine" : ""}" role="status"><span class="trick-who">${escapeHtml(text)}</span>${why}</div>`;
-}
-
 function lastTrickCueHTML(v) {
   if (!v) return "";
   if (v.phase !== "playing" && v.phase !== "choosingTigress") return "";
@@ -974,6 +958,7 @@ function ledSuitActive(v) {
 }
 
 function followSuitHintHTML(v) {
+  if (!v || v.phase === "trickResult") return "";
   const suit = ledSuitActive(v);
   if (!suit) return "";
   const labels = {
@@ -2147,10 +2132,10 @@ function isPlayerThinking(p, v) {
 function tableArrowsSVG() {
   const cx = 50;
   const cy = 50;
-  const rx = 30;
-  const ry = 27;
+  const rx = 32;
+  const ry = 29;
   const count = 3;
-  const sweepDeg = 74;
+  const sweepDeg = 86;
   const paths = [];
   const heads = [];
   for (let i = 0; i < count; i++) {
@@ -2167,11 +2152,13 @@ function tableArrowsSVG() {
       `<path d="M ${x0.toFixed(2)} ${y0.toFixed(2)} A ${rx} ${ry} 0 0 1 ${x1.toFixed(2)} ${y1.toFixed(2)}" />`,
     );
     heads.push(
-      `<polygon points="0,0 -10,-5.8 -6.5,0 -10,5.8" transform="translate(${x1.toFixed(2)} ${y1.toFixed(2)}) rotate(${rot.toFixed(2)})" />`,
+      `<polygon points="0,0 -15,-9 -9,0 -15,9" transform="translate(${x1.toFixed(2)} ${y1.toFixed(2)}) rotate(${rot.toFixed(2)})" />`,
     );
   }
   return `<svg class="table-arrows" viewBox="0 0 100 100" aria-hidden="true">
-    <g fill="none" stroke="#edbf59" stroke-width="2.8" stroke-linecap="round">${paths.join("")}</g>
+    <g fill="none" stroke="#1a1206" stroke-width="7.2" stroke-linecap="round" stroke-linejoin="round">${paths.join("")}</g>
+    <g fill="#1a1206">${heads.join("")}</g>
+    <g fill="none" stroke="#edbf59" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round">${paths.join("")}</g>
     <g fill="#edbf59">${heads.join("")}</g>
   </svg>`;
 }
@@ -2369,13 +2356,12 @@ function circleTableHTML(v) {
   }).join("");
 
   let center = "";
-  const caption = trickCaptionHTML(v);
   const hasCards = (v.trick || []).length > 0;
-  if (caption) center = caption;
+  if (v.phase === "trickResult") center = "";
   else if (destroyed) center = `<div class="table-center void">呢墩作廢，無人贏</div>`;
-  else if (!hasCards && bidding) center = `<div class="table-center dim">叫牌中<br /><span class="arrow-hint">順時針出牌</span></div>`;
-  else if (!hasCards) center = `<div class="table-center dim">呢墩尚未出牌<br /><span class="arrow-hint">順時針出牌</span></div>`;
-  else center = `<div class="table-center dim"><span class="arrow-hint">順時針</span></div>`;
+  else if (!hasCards && bidding) center = `<div class="table-center dim">叫牌中</div>`;
+  else if (!hasCards) center = `<div class="table-center dim">呢墩尚未出牌</div>`;
+  else center = "";
 
   const led = ledSuitActive(v);
   const suitClass = led ? ` suit-${led}` : "";
@@ -2388,15 +2374,31 @@ function circleTableHTML(v) {
 }
 
 
-function tablePromptHTML(v, { bidding, alreadyBid } = {}) {
-  if (bidding) return "";
-  if (v.phase === "trickResult") {
-    const details = (!v.lastTrickDestroyed && (v.lastTrickDetails || []).length)
-      ? `<div class="bonus-banner" role="status">${(v.lastTrickDetails || []).map((d) => `<span class="bonus-chip">${escapeHtml(d)}</span>`).join("")}</div>`
-      : "";
-    return `<div class="turn-banner result">${escapeHtml(v.statusMessage || "")}</div>${details}`;
+function trickResultOverlayHTML(v) {
+  if (!v || v.phase !== "trickResult") return "";
+  maybeWinBuzz(v);
+  const meIndex = (v.players || []).findIndex((p) => p.id === v.yourId);
+  const mine = !v.lastTrickDestroyed && meIndex >= 0 && meIndex === v.lastWinnerIndex;
+  let title;
+  if (v.lastTrickDestroyed) title = "呢墩作廢";
+  else if (mine) title = "你贏咗呢墩";
+  else {
+    const winner = (v.players || [])[v.lastWinnerIndex];
+    title = `${winner?.name || "有人"}贏咗呢墩`;
   }
-  return "";
+  const whyText = v.lastTrickExplanation || v.statusMessage || "";
+  const why = whyText ? `<p class="trick-result-why">${escapeHtml(whyText)}</p>` : "";
+  const details = (!v.lastTrickDestroyed && (v.lastTrickDetails || []).length)
+    ? `<div class="bonus-banner" role="status">${(v.lastTrickDetails || []).map((d) => `<span class="bonus-chip">${escapeHtml(d)}</span>`).join("")}</div>`
+    : "";
+  return `<div class="overlay center trick-result-overlay" role="dialog" aria-modal="true" aria-labelledby="trick-result-title">
+    <div class="sheet trick-result-sheet" data-stop="1">
+      <h2 id="trick-result-title">${escapeHtml(title)}</h2>
+      ${why}
+      ${details}
+      <button type="button" class="btn btn-gold" data-act="continue">下一墩</button>
+    </div>
+  </div>`;
 }
 
 function myBidTrackHTML(v) {
@@ -2653,11 +2655,6 @@ function renderTable() {
     })
     .join("")}</div></div>`;
 
-  const skipTrick = v.phase === "trickResult"
-    ? `<div class="next-trick"><button class="btn btn-ghost" data-act="continue">下一墩</button></div>`
-    : "";
-
-  const tablePrompt = tablePromptHTML(v, { bidding, alreadyBid });
   const confirmBar = confirmBarHTML(v);
   const ledClass = ledSuitActive(v);
 
@@ -2692,8 +2689,6 @@ function renderTable() {
       <div class="table-dock">
         ${prevTrickButtonHTML(v)}
         <div class="dock-status-row">${playWaitHTML(v)}${followSuitHintHTML(v)}</div>
-        ${tablePrompt}
-        ${skipTrick}
         <div class="error-line">${escapeHtml(state.error)}</div>
         ${bidPanel}
         ${confirmBar}
@@ -2703,6 +2698,7 @@ function renderTable() {
       </div>
     </div>
     ${v.pendingTigress ? tigressHTML() : ""}
+    ${trickResultOverlayHTML(v)}
     ${v.phase === "roundResult" || v.phase === "gameOver" ? scoreHTML(v) : ""}
     ${scorePeekHTML(v)}
     ${prevTrickSheetHTML(v)}

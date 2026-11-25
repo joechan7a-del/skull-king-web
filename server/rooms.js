@@ -5,8 +5,8 @@ import { AI_NAMES } from "./ai.js";
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const ROOM_TTL_MS = 3 * 60 * 60 * 1000;
 const EMPTY_TTL_MS = 20 * 60 * 1000;
-const TRICK_PAUSE_MS = 2800;
-const AI_PAUSE_MS = 700;
+const TRICK_PAUSE_MS = 4000; // was 2800; give a moment to read who won
+const AI_PAUSE_MS = 1200; // plays only (bids stay immediate); easier to follow, not sluggish
 
 export class RoomManager {
   constructor() {

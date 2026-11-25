@@ -90,11 +90,9 @@ test("played cards stay on the rim and cues stay off the felt", () => {
 });
 
 test("the bulky follow-suit banner is gone; a corner hint and led-suit tint remain", () => {
-  const prompt = js.slice(js.indexOf("function tablePromptHTML"), js.indexOf("function myBidTrackHTML"));
-  assert.doesNotMatch(prompt, /輪到你出牌/);
-  assert.doesNotMatch(prompt, /turn-banner mine/);
-  assert.doesNotMatch(prompt, /turn-banner wait/);
-  assert.match(prompt, /turn-banner result/);
+  assert.doesNotMatch(js, /輪到你出牌/);
+  assert.doesNotMatch(js, /turn-banner mine/);
+  assert.doesNotMatch(js, /turn-banner wait/);
   assert.match(js, /function ledSuitActive/);
   assert.match(js, /function followSuitHintHTML/);
   assert.match(js, /呢墩要跟黑色（骷髏旗）/);
@@ -125,15 +123,43 @@ test("every game sound reuses the soft UI click", () => {
   assert.doesNotMatch(js, /createOscillator/);
 });
 
-test("tableArrowsSVG uses three large clockwise arrows", () => {
+test("tableArrowsSVG uses three large clockwise arrows without a 順時針 label", () => {
   const fn = js.slice(js.indexOf("function tableArrowsSVG"), js.indexOf("function resetTrickAnim"));
   assert.match(fn, /const count = 3/);
   assert.doesNotMatch(fn, /const n = 8/);
   assert.doesNotMatch(fn, /-3\.4,-2/);
   assert.match(fn, /A \$\{rx\} \$\{ry\} 0 0 1/);
-  assert.match(fn, /-10,-5\.8/);
-  assert.match(js, /arrow-hint">順時針/);
+  assert.match(fn, /-15,-9/);
+  assert.match(fn, /stroke-width="4\.4"/);
+  assert.doesNotMatch(js, /arrow-hint">順時針/);
+  assert.doesNotMatch(js, /順時針出牌/);
   assert.match(css, /\.table-arrows/);
+});
+
+test("trick and round results are overlay dialogs and do not shrink the table", () => {
+  assert.match(js, /function trickResultOverlayHTML/);
+  assert.match(js, /trick-result-overlay/);
+  const render = js.slice(js.indexOf("function renderTable"), js.indexOf("function handOverlap"));
+  assert.match(render, /\$\{trickResultOverlayHTML\(v\)\}/);
+  assert.doesNotMatch(render, /class="next-trick"/);
+  assert.doesNotMatch(render, /tablePromptHTML/);
+  const dock = render.slice(render.indexOf("table-dock"), render.indexOf("pendingTigress"));
+  assert.doesNotMatch(dock, /trickResultOverlayHTML/);
+  assert.doesNotMatch(dock, /scoreHTML/);
+  const score = js.slice(js.indexOf("function scoreHTML"), js.indexOf("function renderRules"));
+  assert.match(score, /class="overlay center"/);
+  assert.match(score, /下一局/);
+  assert.match(html, /app\.js\?v=c16/);
+});
+
+test("AI plays and post-win pauses are modestly longer", () => {
+  const rooms = readFileSync(join(root, "server/rooms.js"), "utf8");
+  const ai = rooms.match(/const AI_PAUSE_MS = (\d+)/);
+  const trick = rooms.match(/const TRICK_PAUSE_MS = (\d+)/);
+  assert.ok(ai, "AI_PAUSE_MS");
+  assert.ok(trick, "TRICK_PAUSE_MS");
+  assert.ok(Number(ai[1]) >= 1100 && Number(ai[1]) <= 1800, `AI play pause ${ai[1]}`);
+  assert.ok(Number(trick[1]) >= 3500 && Number(trick[1]) <= 5500, `trick pause ${trick[1]}`);
 });
 
 test("the confirm-to-play bar overlays the dock and does not shrink the table", () => {
