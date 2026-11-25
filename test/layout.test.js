@@ -81,3 +81,39 @@ test("played cards stay on the rim and cues stay off the felt", () => {
   assert.match(css, /\.table-cues-row/);
   assert.match(css, /\.seat\.place-top/);
 });
+
+test("the bulky follow-suit banner is gone; a corner hint and led-suit tint remain", () => {
+  const prompt = js.slice(js.indexOf("function tablePromptHTML"), js.indexOf("function myBidTrackHTML"));
+  assert.doesNotMatch(prompt, /輪到你出牌/);
+  assert.doesNotMatch(prompt, /turn-banner mine/);
+  assert.doesNotMatch(prompt, /turn-banner wait/);
+  assert.match(prompt, /turn-banner result/);
+  assert.match(js, /function ledSuitActive/);
+  assert.match(js, /function followSuitHintHTML/);
+  assert.match(js, /呢墩要跟黑色（骷髏旗）/);
+  assert.match(js, /呢墩要跟黃色/);
+  assert.match(js, /呢墩要跟綠色（鸚鵡）/);
+  assert.match(js, /呢墩要跟紫色/);
+  assert.match(js, /follow-suit-hint/);
+  assert.match(js, /followSuitHintHTML\(v\)/);
+  assert.match(js, /led-\$\{ledClass\}/);
+  assert.match(css, /\.follow-suit-hint/);
+  assert.match(css, /\.table-screen\.led-black/);
+  assert.match(css, /\.table-felt\.suit-black/);
+  const blackFelt = block(css, ".table-felt.suit-black");
+  assert.match(blackFelt, /#121216|#060608|#2a2a32/);
+  assert.doesNotMatch(js, /createOscillator/);
+});
+
+test("every game sound reuses the soft UI click", () => {
+  assert.match(js, /function playCardFlip\(\) \{ playSound\("click"\); \}/);
+  assert.match(js, /function playUiClick\(\) \{ playSound\("click"\); \}/);
+  assert.match(js, /function playTurnChime\(\) \{ playUiClick\(\); \}/);
+  assert.match(js, /function playBeepSequence\(\) \{ playUiClick\(\); \}/);
+  assert.match(js, /function playFlourishSting\(\) \{ playUiClick\(\); \}/);
+  assert.match(js, /function playMakeChime\(\) \{ playUiClick\(\); \}/);
+  assert.match(js, /function playLobbyTick\(\) \{ playUiClick\(\); \}/);
+  assert.match(js, /playSound\("click"\)/);
+  assert.doesNotMatch(js, /playSound\("flip"\)/);
+  assert.doesNotMatch(js, /createOscillator/);
+});

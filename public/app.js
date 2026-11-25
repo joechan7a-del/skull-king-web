@@ -187,46 +187,21 @@ function playSound(key) {
   }
 }
 
-function playCardFlip() { playSound("flip"); }
+function playCardFlip() { playSound("click"); }
 function playUiClick() { playSound("click"); }
 
 function playDealFlutter(count) {
-  const n = Math.max(1, Math.min(Number(count) || 1, 6));
+  const n = Math.max(1, Math.min(Number(count) || 1, 3));
   if (prefersReducedMotion()) {
-    playCardFlip();
+    playUiClick();
     return;
   }
   for (let i = 0; i < n; i++) {
-    setTimeout(() => playCardFlip(), i * 72);
+    setTimeout(() => playUiClick(), i * 90);
   }
 }
 
-function playTurnChime() {
-  try {
-    if (state.muted) return;
-    unlockAudio();
-    const ctx = getAudioCtx();
-    if (!ctx) return;
-    const now = ctx.currentTime;
-    const notes = [523.25, 783.99];
-    notes.forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.value = freq;
-      const start = now + i * 0.09;
-      gain.gain.setValueAtTime(0.0001, start);
-      gain.gain.exponentialRampToValueAtTime(0.07, start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.22);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(start);
-      osc.stop(start + 0.24);
-    });
-  } catch {
-    /* never block the game */
-  }
-}
+function playTurnChime() { playUiClick(); }
 
 function maybeAnnounceTurn(v) {
   if (!v || !v.inGame) return;
@@ -248,47 +223,13 @@ const FLOURISH_TEXT = {
   whiteWhale: "白鯨出咗！",
 };
 
-function playBeepSequence(notes, { type = "sine", peak = 0.07, attack = 0.02, decay = 0.22, step = 0.09 } = {}) {
-  try {
-    if (state.muted) return;
-    unlockAudio();
-    const ctx = getAudioCtx();
-    if (!ctx) return;
-    const now = ctx.currentTime;
-    notes.forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = type;
-      osc.frequency.value = freq;
-      const start = now + i * step;
-      gain.gain.setValueAtTime(0.0001, start);
-      gain.gain.exponentialRampToValueAtTime(peak, start + attack);
-      gain.gain.exponentialRampToValueAtTime(0.0001, start + decay);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(start);
-      osc.stop(start + decay + 0.02);
-    });
-  } catch {
-    /* never block the game */
-  }
-}
+function playBeepSequence() { playUiClick(); }
 
-function playFlourishSting(kind) {
-  if (kind === "mermaid") playBeepSequence([659.25, 830.61, 987.77], { type: "triangle", peak: 0.08, decay: 0.28, step: 0.08 });
-  else if (kind === "pirate") playBeepSequence([196, 246.94, 392], { type: "sawtooth", peak: 0.05, decay: 0.2, step: 0.1 });
-  else if (kind === "skullKing") playBeepSequence([110, 82.41, 55], { type: "square", peak: 0.045, decay: 0.32, step: 0.12 });
-  else if (kind === "kraken") playBeepSequence([65.41, 49, 98], { type: "sawtooth", peak: 0.055, decay: 0.36, step: 0.11 });
-  else if (kind === "whiteWhale") playBeepSequence([174.61, 220, 349.23], { type: "sine", peak: 0.07, decay: 0.34, step: 0.12 });
-}
+function playFlourishSting() { playUiClick(); }
 
-function playMakeChime() {
-  playBeepSequence([659.25, 830.61, 987.77, 1318.51], { type: "triangle", peak: 0.075, attack: 0.015, decay: 0.26, step: 0.07 });
-}
+function playMakeChime() { playUiClick(); }
 
-function playLobbyTick() {
-  playBeepSequence([784.0], { type: "sine", peak: 0.04, attack: 0.01, decay: 0.12, step: 0 });
-}
+function playLobbyTick() { playUiClick(); }
 
 function flourishKindForPlay(played) {
   if (!played?.card) return "";
@@ -993,6 +934,27 @@ function seatPlace(angleDeg) {
   if (a >= 135 && a < 225) return "left";
   if (a >= 225 && a < 315) return "top";
   return "right";
+}
+
+function ledSuitActive(v) {
+  if (!v || !v.ledSuit || !SUIT_INFO[v.ledSuit]) return "";
+  if (v.phase === "trickResult" && v.lastTrickDestroyed) return "";
+  if ((v.phase === "playing" || v.phase === "choosingTigress") && v.currentTrickLead?.destroyed) return "";
+  if (v.phase === "playing" || v.phase === "choosingTigress" || v.phase === "trickResult") return v.ledSuit;
+  return "";
+}
+
+function followSuitHintHTML(v) {
+  const suit = ledSuitActive(v);
+  if (!suit) return "";
+  const labels = {
+    black: "呢墩要跟黑色（骷髏旗）",
+    yellow: "呢墩要跟黃色",
+    green: "呢墩要跟綠色（鸚鵡）",
+    purple: "呢墩要跟紫色",
+  };
+  const text = labels[suit] || `呢墩要跟${suitLabel(suit)}`;
+  return `<div class="follow-suit-hint suit-${suit}" role="status">${suitPip(suit)}<span>${escapeHtml(text)}</span></div>`;
 }
 
 function midTrickCueHTML(v) {
@@ -2378,14 +2340,14 @@ function circleTableHTML(v) {
   else if (!hasCards) center = `<div class="table-center dim">呢墩尚未出牌<br /><span class="arrow-hint">順時針出牌</span></div>`;
   else center = `<div class="table-center dim"><span class="arrow-hint">順時針</span></div>`;
 
-  const suitClass = v.ledSuit && (v.phase === "playing" || v.phase === "choosingTigress" || v.phase === "trickResult")
-    ? ` suit-${v.ledSuit}`
-    : "";
+  const led = ledSuitActive(v);
+  const suitClass = led ? ` suit-${led}` : "";
   return `<div class="circle-wrap">
     <div class="circle-table n-${n} ${destroyed ? "destroyed" : ""}" role="group" aria-label="牌桌，出牌順序順時針">
       <div class="table-felt felt-rich${suitClass}">${tableArrowsSVG()}${center}${flourishBannerHTML()}</div>
       ${seats}
     </div>
+    ${followSuitHintHTML(v)}
   </div>`;
 }
 
@@ -2397,23 +2359,6 @@ function tablePromptHTML(v, { bidding, alreadyBid } = {}) {
       ? `<div class="bonus-banner" role="status">${(v.lastTrickDetails || []).map((d) => `<span class="bonus-chip">${escapeHtml(d)}</span>`).join("")}</div>`
       : "";
     return `<div class="turn-banner result">${escapeHtml(v.statusMessage || "")}</div>${details}`;
-  }
-  if (v.phase === "playing" && v.isMyTurn) {
-    let text = "輪到你出牌。";
-    if (v.ledSuit) text += `而家要跟${suitLabel(v.ledSuit)}。你有呢種花就要跟；特殊牌隨時可出。`;
-    else if (!(v.trick || []).length) text += "由你先出呢一墩。第一張有花色嘅牌會定花；特殊牌先出就冇得跟花。";
-    else text += "呢墩由特殊牌先出，冇得跟花，可以出任何牌。";
-    return `<div class="turn-banner mine">${suitPip(v.ledSuit)}<span>${escapeHtml(text)}</span></div>`;
-  }
-  if (v.phase === "playing" || v.phase === "choosingTigress") {
-    const cur = (v.players || [])[v.currentPlayerIndex];
-    const name = cur?.name || "對手";
-    let text;
-    if (v.phase === "choosingTigress") text = `等${name}揀母老虎當海盜定逃脫。`;
-    else if (v.ledSuit) text = `輪到${name}出牌。而家要跟${suitLabel(v.ledSuit)}。`;
-    else if (!(v.trick || []).length) text = `輪到${name}出牌。等佢出第一張先定花。`;
-    else text = `輪到${name}出牌。呢墩冇得跟花。`;
-    return `<div class="turn-banner wait">${suitPip(v.ledSuit)}<span>${escapeHtml(text)}</span></div>`;
   }
   return "";
 }
@@ -2678,10 +2623,11 @@ function renderTable() {
 
   const tablePrompt = tablePromptHTML(v, { bidding, alreadyBid }) + playWaitHTML(v);
   const confirmBar = confirmBarHTML(v);
+  const ledClass = ledSuitActive(v);
 
   return `
     ${bannerHTML()}
-    <div class="screen table-screen">
+    <div class="screen table-screen${ledClass ? ` led-${ledClass}` : ""}">
       <div class="table-header">
         <div class="header-left">
           <button class="btn-text" data-act="leave">離開</button>

@@ -518,23 +518,102 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   border-radius: inherit;
   pointer-events: none;
 }
+.table-felt.suit-yellow {
+  background: radial-gradient(ellipse at 50% 38%, #b89620 0%, #7a5e10 48%, #3a2c08 100%);
+  border-color: #d4b24a;
+  box-shadow:
+    inset 0 0 0 3px rgba(255, 230, 140, 0.4),
+    inset 0 0 36px rgba(0, 0, 0, 0.35),
+    0 10px 24px rgba(0, 0, 0, 0.35);
+}
 .table-felt.suit-yellow::before {
-  background: radial-gradient(ellipse at 50% 45%, rgba(255, 224, 90, 0.36) 0%, rgba(255, 210, 40, 0.12) 55%, transparent 75%);
+  background: radial-gradient(ellipse at 50% 45%, rgba(255, 224, 90, 0.28) 0%, rgba(200, 150, 20, 0.1) 55%, transparent 75%);
+}
+.table-felt.suit-green {
+  background: radial-gradient(ellipse at 50% 38%, #2aaa5c 0%, #157a3c 48%, #0a3a20 100%);
+  border-color: #3d8a4a;
+  box-shadow:
+    inset 0 0 0 3px rgba(140, 255, 180, 0.32),
+    inset 0 0 36px rgba(0, 0, 0, 0.32),
+    0 10px 24px rgba(0, 0, 0, 0.35);
 }
 .table-felt.suit-green::before {
-  background: radial-gradient(ellipse at 50% 45%, rgba(110, 230, 150, 0.34) 0%, rgba(50, 180, 90, 0.12) 55%, transparent 75%);
+  background: radial-gradient(ellipse at 50% 45%, rgba(110, 230, 150, 0.3) 0%, rgba(50, 180, 90, 0.1) 55%, transparent 75%);
+}
+.table-felt.suit-purple {
+  background: radial-gradient(ellipse at 50% 38%, #7a3aa8 0%, #4a1e70 48%, #240c38 100%);
+  border-color: #8a5cb8;
+  box-shadow:
+    inset 0 0 0 3px rgba(210, 160, 255, 0.35),
+    inset 0 0 36px rgba(0, 0, 0, 0.4),
+    0 10px 24px rgba(0, 0, 0, 0.35);
 }
 .table-felt.suit-purple::before {
-  background: radial-gradient(ellipse at 50% 45%, rgba(200, 140, 255, 0.34) 0%, rgba(140, 70, 210, 0.12) 55%, transparent 75%);
-}
-.table-felt.suit-black::before {
-  background: radial-gradient(ellipse at 50% 45%, rgba(20, 16, 24, 0.4) 0%, rgba(0, 0, 0, 0.18) 60%, transparent 78%);
+  background: radial-gradient(ellipse at 50% 45%, rgba(200, 140, 255, 0.3) 0%, rgba(140, 70, 210, 0.1) 55%, transparent 75%);
 }
 .table-felt.suit-black {
+  background: radial-gradient(ellipse at 50% 38%, #2a2a32 0%, #121216 48%, #060608 100%);
+  border-color: #c9a227;
   box-shadow:
-    inset 0 0 0 3px rgba(237, 191, 89, 0.5),
-    inset 0 0 36px rgba(0, 0, 0, 0.5),
-    0 10px 24px rgba(0, 0, 0, 0.35);
+    inset 0 0 0 3px rgba(237, 191, 89, 0.55),
+    inset 0 0 40px rgba(0, 0, 0, 0.7),
+    0 10px 28px rgba(0, 0, 0, 0.5);
+}
+.table-felt.suit-black::before {
+  background: radial-gradient(ellipse at 50% 45%, rgba(40, 40, 48, 0.35) 0%, rgba(0, 0, 0, 0.2) 60%, transparent 78%);
+}
+
+.table-screen.led-yellow {
+  background: radial-gradient(ellipse at 50% 32%, rgba(90, 68, 12, 0.72) 0%, rgba(28, 22, 8, 0.88) 58%, rgba(8, 8, 10, 0.96) 100%);
+}
+.table-screen.led-green {
+  background: radial-gradient(ellipse at 50% 32%, rgba(16, 70, 36, 0.7) 0%, rgba(8, 28, 16, 0.88) 58%, rgba(6, 12, 10, 0.96) 100%);
+}
+.table-screen.led-purple {
+  background: radial-gradient(ellipse at 50% 32%, rgba(58, 24, 80, 0.74) 0%, rgba(20, 8, 32, 0.9) 58%, rgba(8, 6, 14, 0.96) 100%);
+}
+.table-screen.led-black {
+  background: radial-gradient(ellipse at 50% 32%, #1a1a20 0%, #0c0c10 48%, #050506 100%);
+}
+
+.follow-suit-hint {
+  position: absolute;
+  right: 2px;
+  bottom: 6px;
+  z-index: 8;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: min(52%, 220px);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  padding: 3px 8px 3px 6px;
+  border-radius: 999px;
+  color: #fff8dc;
+  background: rgba(6, 8, 12, 0.9);
+  border: 1px solid rgba(255, 244, 196, 0.7);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  white-space: nowrap;
+}
+.follow-suit-hint.suit-black {
+  border-color: rgba(237, 191, 89, 0.9);
+  background: rgba(0, 0, 0, 0.92);
+  color: #ffe7a0;
+}
+.follow-suit-hint.suit-yellow {
+  border-color: #f3c94a;
+  color: #ffe9a0;
+}
+.follow-suit-hint.suit-green {
+  border-color: #6ee096;
+  color: #d8ffe4;
+}
+.follow-suit-hint.suit-purple {
+  border-color: #c88cff;
+  color: #f0dcff;
 }
 .table-arrows {
   position: absolute;
@@ -2031,7 +2110,7 @@ button, a, .btn, .btn-text, .sk-play, .sk-wrap, .seat-card, .code, input, .bid-g
 }
 
 .play-wait {
-  margin: 0 0 8px;
+  margin: 0 0 4px;
   text-align: center;
   font-size: 13px;
   font-weight: 700;
