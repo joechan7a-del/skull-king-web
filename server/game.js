@@ -44,6 +44,7 @@ export class Game {
     this.lastNextLeaderIndex = null;
     this.lastTrickDestroyed = false;
     this.lastTrickDetails = [];
+    this.previousTrick = null;
     this.pendingTigress = null;
     this.scores = [];
     this.statusMessage = "";
@@ -80,6 +81,7 @@ export class Game {
     this.lastNextLeaderIndex = null;
     this.lastTrickDestroyed = false;
     this.lastTrickDetails = [];
+    this.previousTrick = null;
     this.pendingTigress = null;
     this.phase = PHASE.BIDDING;
     this.statusMessage = `第 ${this.round} 局，各有 ${n} 張牌。睇完手牌再叫你估會贏幾墩。`;
@@ -235,8 +237,23 @@ export class Game {
     this.revision++;
   }
 
+  _snapshotPreviousTrick() {
+    return {
+      cards: (this.lastTrick || []).map((p) => ({
+        playerIndex: p.playerIndex,
+        playerName: this.players[p.playerIndex]?.name || "",
+        card: p.card,
+        tigressAsPirate: p.tigressAsPirate,
+      })),
+      winnerIndex: this.lastWinnerIndex,
+      destroyed: !!this.lastTrickDestroyed,
+      details: [...(this.lastTrickDetails || [])],
+    };
+  }
+
   advanceTrickResult() {
     if (this.phase !== PHASE.TRICK_RESULT) return { error: "而家唔係墩結果。" };
+    this.previousTrick = this._snapshotPreviousTrick();
     const leader = this.lastNextLeaderIndex ?? this.lastWinnerIndex ?? this.currentPlayerIndex;
     if (this.players.every((p) => p.hand.length === 0)) {
       this._finalizeRound();
@@ -376,6 +393,7 @@ export class Game {
       lastNextLeaderIndex: this.phase === PHASE.TRICK_RESULT ? this.lastNextLeaderIndex : null,
       lastTrickDestroyed: this.phase === PHASE.TRICK_RESULT ? this.lastTrickDestroyed : false,
       lastTrickDetails: this.phase === PHASE.TRICK_RESULT ? this.lastTrickDetails : [],
+      previousTrick: this.previousTrick,
       pendingTigress: !!(
         this.phase === PHASE.CHOOSING_TIGRESS &&
         this.pendingTigress &&

@@ -3,6 +3,7 @@ import { cardFaceHTML, cardBackHTML, iconSVG, escapeHtml, CARD_HELP, SPECIAL_INF
 const TOKEN_KEY = "sk_token";
 const NAME_KEY = "sk_name";
 const ROOM_KEY = "sk_room";
+const MUTE_KEY = "sk_mute";
 
 const state = {
   screen: "home", // home | lobby | play | rules
@@ -23,6 +24,16 @@ const state = {
   seenBustKeys: new Set(),
   explodingBustKeys: new Set(),
   scorePeek: false,
+  prevTrickPeek: false,
+  muted: localStorage.getItem(MUTE_KEY) === "1",
+  lastDealtKey: "",
+  dealingKey: "",
+  dealStartedAt: 0,
+  flyKey: "",
+  flyStartedAt: 0,
+  flyDone: false,
+  flyTimer: 0,
+  seenGameOverKey: "",
   lastRound: 1,
   error: "",
   toast: "",
@@ -108,6 +119,7 @@ function unlockAudio() {
 
 function playSound(key) {
   try {
+    if (state.muted) return;
     unlockAudio();
     const entry = soundBank[key];
     if (!entry) return;
@@ -143,6 +155,71 @@ function playUiClick() { playSound("click"); }
 
 function haptic(ms = 12) {
   try { navigator.vibrate?.(ms); } catch { /* not supported */ }
+}
+
+function muteToggleHTML() {
+  const muted = !!state.muted;
+  const label = muted ? "開聲" : "靜音";
+  const icon = muted
+    ? `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 9v6h4l5 5V4L7 9H3zm10.5 3c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51A6.9 6.9 0 0 0 19 12c0-3.83-2.62-7.04-6.2-7.93v2.06c2.89.86 5 3.54 5 6.87zM4.27 3 3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a8.9 8.9 0 0 0 3.69-1.81L19.73 21 21 19.73 4.27 3z"/></svg>`
+    : `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
+  return `<button type="button" class="mute-btn" data-act="toggle-mute" aria-label="${label}" aria-pressed="${muted ? "true" : "false"}" title="${label}">${icon}</button>`;
+}
+
+function toggleMute() {
+  state.muted = !state.muted;
+  try { localStorage.setItem(MUTE_KEY, state.muted ? "1" : "0"); } catch { /* ignore */ }
+  if (!state.muted) playUiClick();
+  haptic(10);
+  render();
+}
+
+async function shareRoom() {
+  const code = state.code || state.view?.code || "";
+  if (!code) return;
+  const url = shareUrl(code);
+  const text = `一齊嚟玩骷髏王！房號 ${code}\n${url}`;
+  if (typeof navigator.share === "function") {
+    try {
+      await navigator.share({ title: "骷髏王", text, url });
+    } catch (err) {
+      const msg = String(err?.name || "") + " " + String(err?.message || "");
+      const cancelled = /AbortError|cancel|abort/i.test(msg);
+      if (!cancelled) copyText(url);
+    }
+    return;
+  }
+  copyText(url);
+}
+
+let wakeLockSentinel = null;
+
+async function requestWakeLock() {
+  try {
+    if (!navigator.wakeLock?.request) return;
+    if (document.visibilityState !== "visible") return;
+    if (state.screen !== "lobby" && state.screen !== "play") return;
+    if (wakeLockSentinel) return;
+    const lock = await navigator.wakeLock.request("screen");
+    wakeLockSentinel = lock;
+    lock.addEventListener("release", () => {
+      if (wakeLockSentinel === lock) wakeLockSentinel = null;
+    });
+  } catch {
+    wakeLockSentinel = null;
+  }
+}
+
+async function releaseWakeLock() {
+  const lock = wakeLockSentinel;
+  wakeLockSentinel = null;
+  if (!lock) return;
+  try { await lock.release(); } catch { /* ignore */ }
+}
+
+function syncWakeLock() {
+  if (state.screen === "lobby" || state.screen === "play") requestWakeLock();
+  else releaseWakeLock();
 }
 
 const SUIT_ORDER = { yellow: 0, green: 1, purple: 2, black: 3 };
@@ -219,7 +296,9 @@ function goHome({ clearToken = false } = {}) {
   state.selectedCardId = null;
   state.inspect = null;
   state.scorePeek = false;
+  state.prevTrickPeek = false;
   resetTrickAnim();
+  releaseWakeLock();
   if (clearToken) {
     setToken("", "");
     localStorage.removeItem(ROOM_KEY);
@@ -330,6 +409,9 @@ function onMessage(msg) {
       state.seenBustKeys = new Set();
       state.explodingBustKeys = new Set();
       state.scorePeek = false;
+      state.prevTrickPeek = false;
+      state.lastDealtKey = "";
+      resetFlyAnim();
     } else {
       state.screen = state.screen === "rules" ? "rules" : "play";
       if (state.screen !== "rules") state.rulesReturn = "play";
@@ -451,7 +533,7 @@ function discardSavedGame() {
 }
 
 // Event delegation
-app.addEventListener("pointerdown", unlockAudio, { passive: true });
+app.addEventListener("pointerdown", () => { unlockAudio(); syncWakeLock(); }, { passive: true });
 app.addEventListener("click", (e) => {
   const t = e.target.closest("[data-act]");
   if (!t) return;
@@ -459,8 +541,12 @@ app.addEventListener("click", (e) => {
   if (t.classList.contains("overlay") && e.target.closest("[data-stop]")) return;
   const act = t.dataset.act;
   const view = state.view;
+  if (act === "toggle-mute") {
+    toggleMute();
+    return;
+  }
   const cardActs = act === "inspect" || act === "select-card" || act === "play-card";
-  const silentActs = t.classList.contains("overlay") && (act === "close-inspect" || act === "close-score-peek");
+  const silentActs = t.classList.contains("overlay") && (act === "close-inspect" || act === "close-score-peek" || act === "close-prev-trick");
   if (!cardActs && !silentActs) playUiClick();
   if (act === "create") createRoom();
   else if (act === "join") joinRoom();
@@ -475,9 +561,12 @@ app.addEventListener("click", (e) => {
     return;
   }
   else if (act === "close-inspect") { state.inspect = null; render(); return; }
-  else if (act === "card-legend") { state.inspect = { type: "legend" }; state.scorePeek = false; render(); return; }
-  else if (act === "score-peek") { state.inspect = null; state.scorePeek = true; render(); return; }
+  else if (act === "card-legend") { state.inspect = { type: "legend" }; state.scorePeek = false; state.prevTrickPeek = false; render(); return; }
+  else if (act === "score-peek") { state.inspect = null; state.prevTrickPeek = false; state.scorePeek = true; render(); return; }
   else if (act === "close-score-peek") { state.scorePeek = false; render(); return; }
+  else if (act === "prev-trick") { state.inspect = null; state.scorePeek = false; state.prevTrickPeek = true; render(); return; }
+  else if (act === "close-prev-trick") { state.prevTrickPeek = false; render(); return; }
+  else if (act === "share-room") { shareRoom(); return; }
   else if (act === "copy-code") copyText(state.code);
   else if (act === "copy-link") copyText(shareUrl(state.code));
   else if (act === "seats-inc") send({ type: "setSeats", count: (view?.seats || 4) + 1 });
@@ -607,7 +696,8 @@ function openInspect(cardId, why) {
   let card = (v.myHand || []).find((c) => c.id === cardId);
   let tigressAsPirate = null;
   if (!card) {
-    const played = (v.trick || []).find((p) => p.card?.id === cardId);
+    const played = (v.trick || []).find((p) => p.card?.id === cardId)
+      || (v.previousTrick?.cards || []).find((p) => p.card?.id === cardId);
     if (played) {
       card = played.card;
       tigressAsPirate = played.tigressAsPirate;
@@ -615,6 +705,7 @@ function openInspect(cardId, why) {
   }
   if (!card) return;
   state.scorePeek = false;
+  state.prevTrickPeek = false;
   const legal = new Set(v.legalCardIds || []);
   state.inspect = {
     type: "card",
@@ -694,6 +785,7 @@ function renderHome() {
   return `
     ${bannerHTML()}
     <div class="screen home">
+      <div class="home-tools">${muteToggleHTML()}</div>
       <div class="brand">
         <div class="brand-cover">
           <img src="/cover.jpg" width="858" height="1200" alt="One Piece Skull King 封面" />
@@ -771,13 +863,16 @@ function renderLobby() {
       <div class="topbar">
         <button class="btn-text" data-act="leave">離開</button>
         <h2>大廳</h2>
-        <button class="btn-text" data-act="rules">規則</button>
+        <div class="topbar-right">${muteToggleHTML()}<button class="btn-text" data-act="rules">規則</button></div>
       </div>
       <div class="code-hero">
         <div class="label">房號</div>
         <div class="code">${escapeHtml(v.code)}</div>
         <div class="code-actions">
-          <button class="btn btn-gold" data-act="copy-code">複製房號</button>
+          <button class="btn btn-gold" data-act="share-room">分享俾朋友</button>
+        </div>
+        <div class="code-actions secondary">
+          <button class="btn btn-ghost" data-act="copy-code">複製房號</button>
           <button class="btn btn-ghost" data-act="copy-link">複製連結</button>
         </div>
         <div class="share-url">${escapeHtml(shareUrl(v.code))}</div>
@@ -898,6 +993,76 @@ function resetTrickAnim() {
   state.animatingPlayIds = new Set();
   state.seenBustKeys = new Set();
   state.explodingBustKeys = new Set();
+  resetFlyAnim();
+}
+
+function resetFlyAnim() {
+  clearTimeout(state.flyTimer);
+  state.flyTimer = 0;
+  state.flyKey = "";
+  state.flyStartedAt = 0;
+  state.flyDone = false;
+}
+
+function trickFlyKey(v) {
+  if (!v || v.phase !== "trickResult" || v.lastTrickDestroyed) return "";
+  const ids = (v.trick || []).map((p) => p.card?.id).join(",");
+  if (!ids) return "";
+  return `${v.round}:${ids}:${v.lastWinnerIndex}`;
+}
+
+function applyFlyAnim(v) {
+  if (!v || v.phase !== "trickResult" || v.lastTrickDestroyed) {
+    if (state.flyKey) resetFlyAnim();
+    return;
+  }
+  const key = trickFlyKey(v);
+  if (!key) return;
+  const table = app.querySelector(".circle-table");
+  if (!table) return;
+  const winnerSeat = table.querySelector(".seat.winner");
+  const winnerCard = winnerSeat?.querySelector(".seat-card");
+  if (!winnerCard) return;
+  const cards = [...table.querySelectorAll(".seat-card")].filter((el) => !el.classList.contains("empty"));
+  const wr = winnerCard.getBoundingClientRect();
+  const now = performance.now();
+  if (state.flyKey !== key) {
+    clearTimeout(state.flyTimer);
+    state.flyTimer = 0;
+    state.flyKey = key;
+    state.flyStartedAt = now;
+    state.flyDone = false;
+  }
+  const beat = 400;
+  const dur = 480;
+  const elapsed = now - state.flyStartedAt;
+  cards.forEach((card) => {
+    if (card === winnerCard) return;
+    const cr = card.getBoundingClientRect();
+    card.style.setProperty("--fly-dx", `${(wr.left - cr.left).toFixed(1)}px`);
+    card.style.setProperty("--fly-dy", `${(wr.top - cr.top).toFixed(1)}px`);
+    card.classList.remove("fly-win", "flown-win");
+    if (elapsed >= beat + dur || state.flyDone) {
+      card.classList.add("flown-win");
+    } else {
+      card.style.setProperty("--fly-delay", `${((beat - elapsed) / 1000).toFixed(3)}s`);
+      card.classList.add("fly-win");
+    }
+  });
+  if (elapsed >= beat + dur) {
+    state.flyDone = true;
+    return;
+  }
+  if (!state.flyTimer) {
+    state.flyTimer = setTimeout(() => {
+      state.flyTimer = 0;
+      state.flyDone = true;
+      app.querySelectorAll(".seat-card.fly-win").forEach((c) => {
+        c.classList.remove("fly-win");
+        c.classList.add("flown-win");
+      });
+    }, Math.max(16, beat + dur - elapsed));
+  }
 }
 
 function markBustExplode(p, v) {
@@ -1020,7 +1185,10 @@ function circleTableHTML(v) {
 function tablePromptHTML(v, { bidding, alreadyBid } = {}) {
   if (bidding) return "";
   if (v.phase === "trickResult") {
-    return `<div class="turn-banner result">${escapeHtml(v.statusMessage || "")}</div>`;
+    const details = (!v.lastTrickDestroyed && (v.lastTrickDetails || []).length)
+      ? `<div class="bonus-banner" role="status">${(v.lastTrickDetails || []).map((d) => `<span class="bonus-chip">${escapeHtml(d)}</span>`).join("")}</div>`
+      : "";
+    return `<div class="turn-banner result">${escapeHtml(v.statusMessage || "")}</div>${details}`;
   }
   if (v.phase === "playing" && v.isMyTurn) {
     let text = "輪到你出牌。";
@@ -1077,6 +1245,66 @@ function scorePeekHTML(v) {
       <button class="btn btn-sheet" data-act="close-score-peek">返去牌桌</button>
     </div>
   </div>`;
+}
+
+function prevTrickButtonHTML(v) {
+  if (!v?.previousTrick || v.phase === "trickResult") return "";
+  if (v.phase === "roundResult" || v.phase === "gameOver") return "";
+  return `<div class="prev-trick-bar"><button type="button" class="btn btn-ghost prev-trick-btn" data-act="prev-trick">上一墩</button></div>`;
+}
+
+function prevTrickSheetHTML(v) {
+  if (!state.prevTrickPeek || !v?.previousTrick) return "";
+  const t = v.previousTrick;
+  const winner = t.winnerIndex != null ? (v.players || [])[t.winnerIndex] : null;
+  const winnerName = winner?.name || t.cards.find((c) => c.playerIndex === t.winnerIndex)?.playerName || "";
+  let result;
+  if (t.destroyed) result = "呢墩作廢，無人贏（八爪魚或白鯨）。";
+  else result = `${winnerName || "有人"}贏咗呢墩。`;
+  const plays = (t.cards || []).map((played) => {
+    const mine = (v.players || [])[played.playerIndex]?.id === v.yourId;
+    const name = escapeHtml(played.playerName || (v.players || [])[played.playerIndex]?.name || "");
+    const won = !t.destroyed && played.playerIndex === t.winnerIndex;
+    return `<div class="prev-play${won ? " won" : ""}">
+      <div class="prev-who">${name}${mine ? "（你）" : ""}${won ? " · 贏" : ""}</div>
+      <div class="prev-card" data-act="inspect" data-id="${escapeHtml(played.card.id)}">${cardFaceHTML(played.card, { tigressAsPirate: played.tigressAsPirate, compact: true })}</div>
+    </div>`;
+  }).join("");
+  const details = (!t.destroyed && (t.details || []).length)
+    ? `<div class="bonus-banner">${t.details.map((d) => `<span class="bonus-chip">${escapeHtml(d)}</span>`).join("")}</div>`
+    : "";
+  return `<div class="overlay center" data-act="close-prev-trick">
+    <div class="sheet inspect-sheet" data-stop="1">
+      <h2>上一墩</h2>
+      <p>${escapeHtml(result)}</p>
+      ${details}
+      <div class="prev-plays">${plays}</div>
+      <button class="btn btn-sheet" data-act="close-prev-trick">知道喇</button>
+    </div>
+  </div>`;
+}
+
+function podiumHTML(v) {
+  const players = [...(v.players || [])].sort((a, b) => b.score - a.score || 0);
+  if (!players.length) return "";
+  let lastScore = null;
+  let lastPlace = 0;
+  let seen = 0;
+  const rows = players.map((p) => {
+    seen += 1;
+    if (lastScore === null || p.score !== lastScore) {
+      lastPlace = seen;
+      lastScore = p.score;
+    }
+    const mine = p.id === v.yourId;
+    const label = lastPlace === 1 ? "冠軍" : lastPlace === 2 ? "亞軍" : lastPlace === 3 ? "季軍" : `第 ${lastPlace} 名`;
+    return `<div class="podium-row place-${lastPlace}${mine ? " you" : ""}">
+      <span class="podium-place">${label}</span>
+      <span class="podium-name">${escapeHtml(p.name)}${mine ? "（你）" : ""}</span>
+      <span class="podium-score">${p.score} 分</span>
+    </div>`;
+  }).join("");
+  return `<div class="podium" role="list">${rows}</div>`;
 }
 
 function confirmBarHTML(v) {
@@ -1137,13 +1365,39 @@ function renderTable() {
   const canPlay = v.isMyTurn && v.phase === "playing";
   const handCards = sortHand(v.myHand || []);
   const overlap = handOverlap(handCards.length);
-  const hand = `<div class="hand-scroll"><div class="hand">${handCards
+  const dealKey = `${v.round}:${handCards.map((c) => c.id).join(",")}`;
+  let dealing = false;
+  let dealBaseMs = 0;
+  if (handCards.length) {
+    if (dealKey !== state.lastDealtKey) {
+      state.lastDealtKey = dealKey;
+      if (v.phase === "bidding") {
+        state.dealingKey = dealKey;
+        state.dealStartedAt = performance.now();
+        playCardFlip();
+        dealing = true;
+      } else {
+        state.dealingKey = "";
+      }
+    } else if (state.dealingKey === dealKey) {
+      const elapsed = performance.now() - state.dealStartedAt;
+      const total = 32 * Math.max(0, handCards.length - 1) + 200;
+      if (elapsed < total) {
+        dealing = true;
+        dealBaseMs = -elapsed;
+      } else {
+        state.dealingKey = "";
+      }
+    }
+  }
+  const hand = `<div class="hand-scroll"><div class="hand${dealing ? " dealing" : ""}">${handCards
     .map((c, i) => {
       const isLegal = canPlay && legal.has(c.id);
       const dim = canPlay && !legal.has(c.id);
       const selected = isLegal && state.selectedCardId === c.id;
       const why = !isLegal ? cardPlayWhy(c, v) : "";
-      const style = `style="margin-right:${i === handCards.length - 1 ? 0 : overlap}px;z-index:${selected ? 20 : i}"`;
+      const dealCls = dealing ? " deal-in" : "";
+      const style = `style="margin-right:${i === handCards.length - 1 ? 0 : overlap}px;z-index:${selected ? 20 : i};--deal-i:${i};--deal-base:${dealBaseMs}ms"`;
       const inner = cardFaceHTML(c, { dimmed: dim });
       const info = c.special
         ? `<button class="card-info" data-act="inspect" data-id="${escapeHtml(c.id)}" aria-label="睇牌義">?</button>`
@@ -1155,12 +1409,12 @@ function renderTable() {
           : (c.suit === v.ledSuit ? `<span class="card-tag follow">跟</span>` : "");
       }
       if (isLegal) {
-        return `<div class="sk-wrap${selected ? " selected" : ""}" ${style}>
+        return `<div class="sk-wrap${selected ? " selected" : ""} playable${dealCls}" ${style}>
           <button class="sk-play" data-act="select-card" data-id="${escapeHtml(c.id)}">${inner.replace("sk-card ", `sk-card legal ${selected ? "picked " : ""}`)}</button>
           ${info}${tag}
         </div>`;
       }
-      return `<div class="sk-wrap inspect-only" ${style}>
+      return `<div class="sk-wrap inspect-only${dim ? " unplayable" : ""}${dealCls}" ${style}>
         <button class="sk-play" data-act="inspect" data-id="${escapeHtml(c.id)}" data-why="${escapeHtml(why)}">${inner}</button>
         ${info}
       </div>`;
@@ -1178,7 +1432,10 @@ function renderTable() {
     ${bannerHTML()}
     <div class="screen table-screen">
       <div class="table-header">
-        <button class="btn-text" data-act="leave">離開</button>
+        <div class="header-left">
+          <button class="btn-text" data-act="leave">離開</button>
+          ${muteToggleHTML()}
+        </div>
         <div class="center">
           <div class="round">第 ${v.round} 局／10</div>
           <div class="sub">各 ${v.cardsDealt} 張</div>
@@ -1191,6 +1448,7 @@ function renderTable() {
       </div>
       ${circleTableHTML(v)}
       <div class="table-dock">
+        ${prevTrickButtonHTML(v)}
         ${tablePrompt}
         ${skipTrick}
         <div class="error-line">${escapeHtml(state.error)}</div>
@@ -1203,6 +1461,7 @@ function renderTable() {
     ${v.pendingTigress ? tigressHTML() : ""}
     ${v.phase === "roundResult" || v.phase === "gameOver" ? scoreHTML(v) : ""}
     ${scorePeekHTML(v)}
+    ${prevTrickSheetHTML(v)}
     ${inspectHTML()}
     ${toastHTML()}
   `;
@@ -1237,6 +1496,13 @@ function tigressHTML() {
 function scoreHTML(v) {
   const latest = v.scores?.[v.scores.length - 1];
   const over = v.phase === "gameOver";
+  if (over) {
+    const key = `over:${v.round}:${(v.players || []).map((p) => p.score).join(",")}`;
+    if (state.seenGameOverKey !== key) {
+      state.seenGameOverKey = key;
+      haptic(28);
+    }
+  }
   const meRow = (latest?.rows || []).find((r) => r.playerId === v.yourId);
   const rows = (latest?.rows || [])
     .map((r) => {
@@ -1282,7 +1548,7 @@ function scoreHTML(v) {
   return `<div class="overlay center">
     <div class="sheet">
       <h2>${over ? "最終分數" : `第 ${v.round} 局結果`}</h2>
-      ${over ? `<p>${escapeHtml(v.statusMessage || "")}</p>` : ""}
+      ${over ? `<p>${escapeHtml(v.statusMessage || "")}</p>${podiumHTML(v)}` : ""}
       ${mineSummary}
       <div class="score-wrap">
         <table class="score-table">
@@ -1338,6 +1604,8 @@ function render() {
   else if (screen === "play") html = renderTable();
   else html = renderHome();
   app.innerHTML = html;
+  if (screen === "play") applyFlyAnim(state.view);
+  syncWakeLock();
 }
 
 async function boot() {
@@ -1357,4 +1625,11 @@ async function boot() {
 boot();
 window.addEventListener("resize", () => {
   if (state.screen === "play") render();
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") releaseWakeLock();
+  else syncWakeLock();
+});
+window.addEventListener("pagehide", () => {
+  releaseWakeLock();
 });

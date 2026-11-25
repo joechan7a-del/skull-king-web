@@ -394,3 +394,104 @@ test("round result waits for all connected humans before advancing", () => {
   assert.equal(room.game.phase, PHASE.BIDDING);
   assert.equal(room.game.round, 2);
 });
+
+test("previousTrick is snapshotted after leaving trickResult and cleared on a new round", () => {
+  const g = new Game(seats(2, 0));
+  g.start();
+  g.round = 2;
+  g.players[0].hand = [makeSuit("yellow", 3), makeSuit("green", 14)];
+  g.players[1].hand = [makeSuit("yellow", 12), makeSpecial("tigress")];
+  g.players[0].bid = 1;
+  g.players[1].bid = 1;
+  g.phase = PHASE.PLAYING;
+  g.currentPlayerIndex = 1;
+  g.playCard("h1", "yellow-12");
+  g.playCard("h0", "yellow-3");
+  assert.equal(g.phase, PHASE.TRICK_RESULT);
+  let view = g.viewFor("h0");
+  assert.equal(view.previousTrick, null);
+  assert.equal(view.lastWinnerIndex, 1);
+  assert.ok(!("hand" in view.players.find((p) => p.id === "h1")));
+  g.advanceTrickResult();
+  assert.equal(g.phase, PHASE.PLAYING);
+  view = g.viewFor("h0");
+  assert.ok(view.previousTrick);
+  assert.equal(view.previousTrick.destroyed, false);
+  assert.equal(view.previousTrick.winnerIndex, 1);
+  assert.equal(view.previousTrick.cards.length, 2);
+  assert.equal(view.previousTrick.cards[0].playerName, "玩家2");
+  assert.equal(view.previousTrick.cards[0].card.id, "yellow-12");
+  assert.equal(view.previousTrick.cards[1].card.id, "yellow-3");
+  assert.equal(view.lastWinnerIndex, null);
+  assert.deepEqual(view.lastTrickDetails, []);
+  assert.ok(!view.previousTrick.cards.some((c) => c.card.id === "green-14"));
+  assert.ok(!view.myHand.some((c) => ["yellow-3", "yellow-12"].includes(c.id)));
+
+  g.playCard("h1", "tigress", true);
+  g.playCard("h0", "green-14");
+  assert.equal(g.phase, PHASE.TRICK_RESULT);
+  view = g.viewFor("h1");
+  // During the next result, previousTrick still shows the earlier completed trick.
+  assert.equal(view.previousTrick.cards[0].card.id, "yellow-12");
+  assert.equal(view.lastWinnerIndex, 1);
+  g.advanceTrickResult();
+  assert.equal(g.phase, PHASE.ROUND_RESULT);
+  view = g.viewFor("h0");
+  assert.equal(view.previousTrick.destroyed, false);
+  assert.equal(view.previousTrick.winnerIndex, 1);
+  const tig = view.previousTrick.cards.find((c) => c.card.special === "tigress");
+  assert.equal(tig.tigressAsPirate, true);
+  assert.equal(tig.playerName, "玩家2");
+
+  g.continueAfterRound();
+  assert.equal(g.phase, PHASE.BIDDING);
+  assert.equal(g.round, 3);
+  view = g.viewFor("h0");
+  assert.equal(view.previousTrick, null);
+});
+
+test("previousTrick records a voided trick without capture bonuses", () => {
+  const g = new Game(seats(2, 0));
+  g.start();
+  g.round = 2;
+  g.players[0].hand = [makeSuit("yellow", 12), makeSuit("green", 5)];
+  g.players[1].hand = [makeSpecial("kraken"), makeSuit("green", 10)];
+  g.players[0].bid = 0;
+  g.players[1].bid = 1;
+  g.phase = PHASE.PLAYING;
+  g.currentPlayerIndex = 0;
+  g.playCard("h0", "yellow-12");
+  g.playCard("h1", "kraken");
+  assert.equal(g.lastTrickDestroyed, true);
+  let view = g.viewFor("h0");
+  assert.equal(view.previousTrick, null);
+  g.advanceTrickResult();
+  view = g.viewFor("h0");
+  assert.equal(view.previousTrick.destroyed, true);
+  assert.equal(view.previousTrick.winnerIndex, null);
+  assert.deepEqual(view.previousTrick.details, []);
+  assert.equal(view.previousTrick.cards.length, 2);
+});
+
+test("previousTrick keeps 14-point bonus details after a white whale number win", () => {
+  const g = new Game(seats(3, 0));
+  g.start();
+  g.round = 1;
+  g.players[0].hand = [makeSuit("yellow", 14)];
+  g.players[1].hand = [makeSpecial("pirate", 0)];
+  g.players[2].hand = [makeSpecial("whiteWhale")];
+  g.players[0].bid = 1;
+  g.players[1].bid = 1;
+  g.players[2].bid = 0;
+  g.phase = PHASE.PLAYING;
+  g.currentPlayerIndex = 0;
+  g.playCard("h0", "yellow-14");
+  g.playCard("h1", "pirate-0");
+  g.playCard("h2", "whiteWhale");
+  g.advanceTrickResult();
+  const view = g.viewFor("h0");
+  assert.equal(view.previousTrick.destroyed, false);
+  assert.equal(view.previousTrick.winnerIndex, 0);
+  assert.ok(view.previousTrick.details.some((d) => d.includes("寶藏箱 14")));
+  assert.ok(!view.previousTrick.details.some((d) => d.includes("捕獲")));
+});
