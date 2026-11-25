@@ -319,6 +319,32 @@ export function winnerIndex(trick) {
   return resolveTrick(trick).winnerPlayerIndex;
 }
 
+function leadCardLabel(play) {
+  if (!play?.card) return "";
+  return displayName(play.card);
+}
+
+/**
+ * Who currently leads an in-progress (possibly incomplete) trick.
+ * Uses official resolveTrick / winnerIndex; does not invent new rules.
+ * Returns null for an empty trick.
+ * { destroyed: true } if a Kraken or White Whale already voids the trick as it stands.
+ * { leading: false } if only escapes / Tigress-as-escape have been played.
+ * Otherwise { playerIndex, cardLabel }.
+ */
+export function currentTrickLead(trick) {
+  if (!Array.isArray(trick) || !trick.length) return null;
+  const outcome = resolveTrick(trick);
+  if (outcome.destroyed) return { destroyed: true };
+  if (trick.every(isEffectiveEscape)) return { leading: false };
+  const playerIndex = outcome.winnerPlayerIndex;
+  const play = trick.find((p) => p.playerIndex === playerIndex);
+  return {
+    playerIndex,
+    cardLabel: leadCardLabel(play),
+  };
+}
+
 /**
  * Potential bonuses for the winner of this trick.
  * Awarded only later if that player makes their bid.

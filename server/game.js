@@ -9,6 +9,7 @@ import {
   scoreRound,
   ledSuit,
   SUIT_INFO,
+  currentTrickLead,
 } from "./rules.js";
 import { bid as aiBid, choosePlay as aiChoosePlay } from "./ai.js";
 
@@ -383,6 +384,25 @@ export class Game {
     const trickForSuit = this.phase === PHASE.TRICK_RESULT ? this.lastTrick : this.trick;
     const suit = trickForSuit && trickForSuit.length ? ledSuit(trickForSuit) : null;
 
+    let leadView = null;
+    if (
+      (this.phase === PHASE.PLAYING || this.phase === PHASE.CHOOSING_TIGRESS) &&
+      this.trick.length
+    ) {
+      const lead = currentTrickLead(this.trick);
+      if (lead?.destroyed) {
+        leadView = { destroyed: true };
+      } else if (lead && lead.leading === false) {
+        leadView = { leading: false };
+      } else if (lead) {
+        leadView = {
+          playerIndex: lead.playerIndex,
+          playerName: this.players[lead.playerIndex]?.name || "",
+          cardLabel: lead.cardLabel,
+        };
+      }
+    }
+
     const trickNumber = this.phase === PHASE.BIDDING
       ? 0
       : (this.phase === PHASE.TRICK_RESULT || this.phase === PHASE.ROUND_RESULT || this.phase === PHASE.GAME_OVER)
@@ -420,6 +440,7 @@ export class Game {
       legalCardIds: legal,
       isMyTurn: this.phase === PHASE.PLAYING && myIndex === this.currentPlayerIndex,
       ledSuit: suit,
+      currentTrickLead: leadView,
       followHint: this.followHintFor(playerId),
       scores: this.scores,
       players: this.players.map((p, i) => ({

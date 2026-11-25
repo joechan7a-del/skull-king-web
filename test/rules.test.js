@@ -13,6 +13,7 @@ import {
   standardDeck,
   isLegal,
   activeBeast,
+  currentTrickLead,
 } from "../server/rules.js";
 
 const Y = "yellow",
@@ -345,4 +346,59 @@ test("destroyed trick awards no 14 bonus even if a 14 was played", () => {
   const r = resolveTrick(t);
   assert.equal(r.destroyed, true);
   assert.equal(bonusPts(t, r.winnerPlayerIndex), 0);
+});
+
+test("currentTrickLead is null on an empty trick", () => {
+  assert.equal(currentTrickLead([]), null);
+});
+
+test("currentTrickLead follows official winner on an incomplete numbered trick", () => {
+  const first = currentTrickLead([P(0, suit(Y, 7))]);
+  assert.equal(first.playerIndex, 0);
+  assert.equal(first.cardLabel, "黃7");
+  const overtaken = currentTrickLead([P(0, suit(Y, 7)), P(1, suit(Y, 12))]);
+  assert.equal(overtaken.playerIndex, 1);
+  assert.equal(overtaken.cardLabel, "黃12");
+  const trump = currentTrickLead([P(0, suit(Y, 14)), P(1, suit(B, 2))]);
+  assert.equal(trump.playerIndex, 1);
+  assert.equal(trump.cardLabel, "黑2");
+});
+
+test("currentTrickLead: only escapes or tigress-as-escape means nobody is leading yet", () => {
+  const onlyEsc = currentTrickLead([P(0, special(ESC, 0)), P(1, special(ESC, 1))]);
+  assert.equal(onlyEsc.leading, false);
+  assert.equal(onlyEsc.destroyed, undefined);
+  const tigEscape = currentTrickLead([P(0, special(ESC, 0)), P(1, special(TIG), false)]);
+  assert.equal(tigEscape.leading, false);
+});
+
+test("currentTrickLead: tigress-as-pirate can take the lead after escapes", () => {
+  const lead = currentTrickLead([P(0, special(ESC, 0)), P(1, special(TIG), true)]);
+  assert.equal(lead.playerIndex, 1);
+  assert.equal(lead.cardLabel, "母老虎");
+});
+
+test("currentTrickLead: kraken already in the trick marks it about to be voided", () => {
+  const lead = currentTrickLead([P(0, suit(Y, 12)), P(1, special(KRA))]);
+  assert.deepEqual(lead, { destroyed: true });
+});
+
+test("currentTrickLead: white whale voids when no numbers are present yet", () => {
+  const onlyWhale = currentTrickLead([P(0, special(WH))]);
+  assert.deepEqual(onlyWhale, { destroyed: true });
+  const specials = currentTrickLead([P(0, special(PIR, 0)), P(1, special(WH))]);
+  assert.deepEqual(specials, { destroyed: true });
+});
+
+test("currentTrickLead: white whale with numbers uses the official highest-rank winner", () => {
+  const lead = currentTrickLead([P(0, suit(Y, 7)), P(1, special(PIR, 0)), P(2, special(WH))]);
+  assert.equal(lead.destroyed, undefined);
+  assert.equal(lead.playerIndex, 0);
+  assert.equal(lead.cardLabel, "黃7");
+});
+
+test("currentTrickLead: pirate currently beats mermaid mid-trick", () => {
+  const lead = currentTrickLead([P(0, special(MER, 0)), P(1, special(PIR, 0))]);
+  assert.equal(lead.playerIndex, 1);
+  assert.equal(lead.cardLabel, "海盜");
 });

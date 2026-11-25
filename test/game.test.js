@@ -533,3 +533,70 @@ test("trickNumber counts completed and current tricks including voided ones", ()
   assert.equal(view.phase, PHASE.ROUND_RESULT);
   assert.equal(view.trickNumber, 2);
 });
+
+test("view exposes currentTrickLead on incomplete tricks and hides it after the trick resolves", () => {
+  const g = new Game(seats(3, 0));
+  g.start();
+  g.round = 1;
+  g.players[0].hand = [makeSuit("yellow", 7)];
+  g.players[1].hand = [makeSuit("yellow", 12)];
+  g.players[2].hand = [makeSpecial("kraken")];
+  g.players[0].bid = 0;
+  g.players[1].bid = 1;
+  g.players[2].bid = 0;
+  g.phase = PHASE.PLAYING;
+  g.currentPlayerIndex = 0;
+  let view = g.viewFor("h0");
+  assert.equal(view.currentTrickLead, null);
+  g.playCard("h0", "yellow-7");
+  view = g.viewFor("h1");
+  assert.equal(view.currentTrickLead.playerIndex, 0);
+  assert.equal(view.currentTrickLead.playerName, "你");
+  assert.equal(view.currentTrickLead.cardLabel, "黃7");
+  g.playCard("h1", "yellow-12");
+  view = g.viewFor("h0");
+  assert.equal(view.currentTrickLead.playerIndex, 1);
+  assert.equal(view.currentTrickLead.playerName, "玩家2");
+  assert.equal(view.currentTrickLead.cardLabel, "黃12");
+  g.playCard("h2", "kraken");
+  view = g.viewFor("h0");
+  assert.equal(view.phase, PHASE.TRICK_RESULT);
+  assert.equal(view.currentTrickLead, null);
+  assert.equal(view.lastTrickDestroyed, true);
+});
+
+test("view currentTrickLead marks a mid-trick kraken as about to be voided", () => {
+  const g = new Game(seats(3, 0));
+  g.start();
+  g.round = 1;
+  g.players[0].hand = [makeSpecial("kraken")];
+  g.players[1].hand = [makeSuit("yellow", 4)];
+  g.players[2].hand = [makeSuit("green", 9)];
+  g.players[0].bid = 0;
+  g.players[1].bid = 0;
+  g.players[2].bid = 1;
+  g.phase = PHASE.PLAYING;
+  g.currentPlayerIndex = 0;
+  g.playCard("h0", "kraken");
+  const view = g.viewFor("h1");
+  assert.equal(view.phase, PHASE.PLAYING);
+  assert.deepEqual(view.currentTrickLead, { destroyed: true });
+});
+
+test("view currentTrickLead is leading:false when only escapes are down", () => {
+  const g = new Game(seats(3, 0));
+  g.start();
+  g.round = 1;
+  g.players[0].hand = [makeSpecial("escape", 0)];
+  g.players[1].hand = [makeSpecial("escape", 1)];
+  g.players[2].hand = [makeSuit("yellow", 8)];
+  g.players[0].bid = 0;
+  g.players[1].bid = 0;
+  g.players[2].bid = 1;
+  g.phase = PHASE.PLAYING;
+  g.currentPlayerIndex = 0;
+  g.playCard("h0", "escape-0");
+  const view = g.viewFor("h2");
+  assert.equal(view.currentTrickLead.leading, false);
+  assert.equal(view.currentTrickLead.destroyed, undefined);
+});

@@ -48,6 +48,18 @@ const state = {
   lanUrls: [],
   conn: "idle", // idle | connecting | open | reconnecting | closed
   pendingRoom: "",
+  flourish: null,
+  flourishTimer: 0,
+  bidRevealKey: "",
+  bidRevealStartedAt: 0,
+  scoreFloatKey: "",
+  scoreFloatStartedAt: 0,
+  makeToastKeys: new Set(),
+  makeReady: false,
+  lobbySeen: false,
+  lobbySnapshot: null,
+  codeBoxFocus: null,
+  autoJoinLock: false,
 };
 
 const app = document.getElementById("app");
@@ -199,6 +211,313 @@ function maybeAnnounceTurn(v) {
   haptic(22);
 }
 
+const FLOURISH_TEXT = {
+  mermaid: "人魚出咗！",
+  pirate: "海盜出咗！",
+  skullKing: "骷髏王出咗！",
+  kraken: "八爪魚出咗！",
+  whiteWhale: "白鯨出咗！",
+};
+
+function playBeepSequence(notes, { type = "sine", peak = 0.07, attack = 0.02, decay = 0.22, step = 0.09 } = {}) {
+  try {
+    if (state.muted) return;
+    unlockAudio();
+    const ctx = getAudioCtx();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = type;
+      osc.frequency.value = freq;
+      const start = now + i * step;
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(peak, start + attack);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + decay);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(start);
+      osc.stop(start + decay + 0.02);
+    });
+  } catch {
+    /* never block the game */
+  }
+}
+
+function playFlourishSting(kind) {
+  if (kind === "mermaid") playBeepSequence([659.25, 830.61, 987.77], { type: "triangle", peak: 0.08, decay: 0.28, step: 0.08 });
+  else if (kind === "pirate") playBeepSequence([196, 246.94, 392], { type: "sawtooth", peak: 0.05, decay: 0.2, step: 0.1 });
+  else if (kind === "skullKing") playBeepSequence([110, 82.41, 55], { type: "square", peak: 0.045, decay: 0.32, step: 0.12 });
+  else if (kind === "kraken") playBeepSequence([65.41, 49, 98], { type: "sawtooth", peak: 0.055, decay: 0.36, step: 0.11 });
+  else if (kind === "whiteWhale") playBeepSequence([174.61, 220, 349.23], { type: "sine", peak: 0.07, decay: 0.34, step: 0.12 });
+}
+
+function playMakeChime() {
+  playBeepSequence([659.25, 830.61, 987.77, 1318.51], { type: "triangle", peak: 0.075, attack: 0.015, decay: 0.26, step: 0.07 });
+}
+
+function playLobbyTick() {
+  playBeepSequence([784.0], { type: "sine", peak: 0.04, attack: 0.01, decay: 0.12, step: 0 });
+}
+
+function flourishKindForPlay(played) {
+  if (!played?.card) return "";
+  if (played.card.special === "tigress") return played.tigressAsPirate ? "pirate" : "";
+  const kind = played.card.special;
+  return FLOURISH_TEXT[kind] ? kind : "";
+}
+
+function maybeSpecialFlourish(played) {
+  const kind = flourishKindForPlay(played);
+  if (!kind) return;
+  const text = FLOURISH_TEXT[kind];
+  state.flourish = { text, kind, startedAt: performance.now() };
+  playFlourishSting(kind);
+  clearTimeout(state.flourishTimer);
+  state.flourishTimer = setTimeout(() => {
+    state.flourish = null;
+    state.flourishTimer = 0;
+    render();
+  }, 1050);
+}
+
+function flourishBannerHTML() {
+  if (!state.flourish) return "";
+  const elapsed = performance.now() - (state.flourish.startedAt || 0);
+  if (elapsed >= 1100) return "";
+  return `<div class="flourish-banner" data-kind="${escapeHtml(state.flourish.kind)}" role="status">${escapeHtml(state.flourish.text)}</div>`;
+}
+
+function maybeCelebrateMake(v) {
+  if (!v || !v.inGame) return;
+  const me = (v.players || []).find((p) => p.id === v.yourId);
+  if (!me || !v.bidsRevealed || me.bid == null) {
+    if (v.inGame) state.makeReady = true;
+    return;
+  }
+  const key = `${v.round}:${me.id}`;
+  const made = me.bid > 0 && me.tricksWon === me.bid && me.tricksWon <= me.bid;
+  if (!state.makeReady) {
+    if (made) state.makeToastKeys.add(key);
+    state.makeReady = true;
+    return;
+  }
+  if (!made || state.makeToastKeys.has(key)) return;
+  if (v.phase === "bidding") return;
+  state.makeToastKeys.add(key);
+  showToast("估中喇！", { defer: true });
+  playMakeChime();
+  haptic(20);
+}
+
+function maybeLobbyToasts(v) {
+  if (!v || v.inGame || v.phase !== "lobby") {
+    if (v?.inGame) {
+      state.lobbySeen = false;
+      state.lobbySnapshot = null;
+    }
+    return;
+  }
+  const players = v.lobbyPlayers || [];
+  const snap = players.map((p) => ({ id: p.id, name: p.name, ready: !!p.ready }));
+  if (!state.lobbySeen || state.conn === "reconnecting" || state.conn === "connecting") {
+    state.lobbySeen = true;
+    state.lobbySnapshot = snap;
+    return;
+  }
+  const prevMap = new Map((state.lobbySnapshot || []).map((p) => [p.id, p]));
+  const nextMap = new Map(snap.map((p) => [p.id, p]));
+  const me = v.yourId;
+  let msg = "";
+  for (const p of snap) {
+    if (p.id === me) continue;
+    const old = prevMap.get(p.id);
+    if (!old) msg = `${p.name}入咗房`;
+    else if (!old.ready && p.ready) msg = `${p.name}已準備`;
+    else if (old.ready && !p.ready) msg = `${p.name}取消準備`;
+  }
+  for (const old of state.lobbySnapshot || []) {
+    if (old.id === me) continue;
+    if (!nextMap.has(old.id)) msg = `${old.name}離開咗`;
+  }
+  state.lobbySnapshot = snap;
+  if (msg) {
+    showToast(msg, { defer: true });
+    playLobbyTick();
+  }
+}
+
+function playerConnected(p, v) {
+  if (!p) return true;
+  if (p.isAI) return true;
+  const list = v?.lobbyPlayers || [];
+  const h = list.find((x) => x.id === p.id);
+  if (!h) return true;
+  return h.connected !== false;
+}
+
+function handStackHTML(count) {
+  const n = Math.max(0, Math.min(Number(count) || 0, 5));
+  if (!n) return "";
+  const layers = Array.from({ length: n }, (_, i) => `<i style="--s:${i}"></i>`).join("");
+  return `<span class="hand-stack" aria-hidden="true">${layers}</span>`;
+}
+
+function bidRevealAttr(v, visualIndex) {
+  if (!v?.bidsRevealed) return { cls: "", style: "" };
+  const key = String(v.round);
+  const n = (v.players || []).length;
+  const total = 70 * Math.max(0, n - 1) + 430;
+  if (state.bidRevealKey !== key) {
+    state.bidRevealKey = key;
+    state.bidRevealStartedAt = performance.now();
+  }
+  const elapsed = performance.now() - state.bidRevealStartedAt;
+  if (elapsed >= total) return { cls: "", style: "" };
+  return {
+    cls: " bid-reveal",
+    style: `--reveal-i:${visualIndex};--reveal-base:${(-elapsed).toFixed(0)}ms`,
+  };
+}
+
+function scoreFloaterHTML(v, playerId, visualIndex) {
+  if (!v || (v.phase !== "roundResult" && v.phase !== "gameOver")) return "";
+  const latest = (v.scores || [])[v.scores.length - 1];
+  if (!latest) return "";
+  const key = v.phase === "gameOver" ? `go:${v.round}` : `rr:${v.round}`;
+  if (state.scoreFloatKey !== key) {
+    state.scoreFloatKey = key;
+    state.scoreFloatStartedAt = performance.now();
+  }
+  const elapsed = performance.now() - state.scoreFloatStartedAt;
+  if (elapsed >= 1500) return "";
+  const row = (latest.rows || []).find((r) => r.playerId === playerId);
+  if (!row || row.roundTotal == null) return "";
+  const cls = row.roundTotal < 0 ? "neg" : "pos";
+  const label = row.roundTotal > 0 ? `+${row.roundTotal}` : String(row.roundTotal);
+  const delay = (-elapsed + visualIndex * 60).toFixed(0);
+  return `<div class="score-floater ${cls}" style="--float-base:${delay}ms">${escapeHtml(label)}</div>`;
+}
+
+function roundRailHTML(v) {
+  if (!v || !v.round) return "";
+  const cur = Math.min(10, Math.max(1, v.round));
+  const segs = Array.from({ length: 10 }, (_, i) => {
+    const n = i + 1;
+    const cls = n < cur ? "done" : n === cur ? "current" : "future";
+    return `<span class="round-seg ${cls}"></span>`;
+  }).join("");
+  return `<div class="round-rail" aria-label="進度：第 ${cur}／10 局">${segs}</div>`;
+}
+
+function normalizeJoinCode(raw) {
+  return String(raw || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+}
+
+function maybeAutoJoin(code) {
+  const raw = normalizeJoinCode(code);
+  if (raw.length !== 6) return false;
+  if (state.autoJoinLock) return false;
+  if (state.screen !== "home") return false;
+  state.autoJoinLock = true;
+  joinRoom(raw);
+  setTimeout(() => { state.autoJoinLock = false; }, 1200);
+  return true;
+}
+
+function codeBoxesHTML(prefill) {
+  const code = normalizeJoinCode(prefill);
+  const boxes = Array.from({ length: 6 }, (_, i) => {
+    const ch = code[i] || "";
+    return `<input class="code-box" type="text" inputmode="text" autocapitalize="characters" autocomplete="off" maxlength="1" data-box="${i}" value="${escapeHtml(ch)}" aria-label="房號第 ${i + 1} 個字" spellcheck="false">`;
+  }).join("");
+  return `
+    <label class="field-label" for="code-input">房號</label>
+    <input id="code-input" class="code-input-sr" maxlength="6" value="${escapeHtml(code)}" autocapitalize="characters" autocomplete="off" inputmode="text" enterkeyhint="go" spellcheck="false" />
+    <div class="join-row">
+      <div class="code-boxes" role="group" aria-label="房號">${boxes}</div>
+      <button type="button" class="btn btn-ghost" data-act="paste-code">貼上</button>
+      <button type="button" class="btn btn-ghost" data-act="join">加入</button>
+    </div>`;
+}
+
+function bindCodeBoxes() {
+  if (state.screen !== "home") return;
+  const hidden = app.querySelector("#code-input");
+  const boxes = [...app.querySelectorAll(".code-box")];
+  if (!boxes.length) return;
+
+  const readBoxes = () => normalizeJoinCode(boxes.map((b) => b.value || "").join(""));
+
+  const sync = (code, { focusIndex, joinIfFull } = {}) => {
+    const raw = normalizeJoinCode(code);
+    state.joinCode = raw;
+    boxes.forEach((b, i) => {
+      if (b.value !== (raw[i] || "")) b.value = raw[i] || "";
+    });
+    if (hidden && hidden.value !== raw) hidden.value = raw;
+    if (typeof focusIndex === "number" && boxes[focusIndex]) {
+      boxes[focusIndex].focus();
+      boxes[focusIndex].select();
+      state.codeBoxFocus = focusIndex;
+    }
+    if (joinIfFull) maybeAutoJoin(raw);
+  };
+
+  boxes.forEach((box, i) => {
+    box.addEventListener("input", () => {
+      const typed = normalizeJoinCode(box.value);
+      if (typed.length > 1) {
+        const prefix = readBoxes().slice(0, i);
+        sync(prefix + typed, { focusIndex: Math.min(5, (prefix + typed).length), joinIfFull: true });
+        return;
+      }
+      const chars = boxes.map((b, j) => (j === i ? typed.slice(-1) : (b.value || "")));
+      const raw = normalizeJoinCode(chars.join(""));
+      box.value = typed.slice(-1);
+      sync(raw, { focusIndex: typed ? Math.min(5, i + 1) : i, joinIfFull: true });
+    });
+    box.addEventListener("keydown", (e) => {
+      if (e.key === "Backspace" && !box.value && i > 0) {
+        e.preventDefault();
+        boxes[i - 1].value = "";
+        sync(readBoxes(), { focusIndex: i - 1 });
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        joinRoom();
+      } else if (e.key === "ArrowLeft" && i > 0) {
+        e.preventDefault();
+        boxes[i - 1].focus();
+        boxes[i - 1].select();
+        state.codeBoxFocus = i - 1;
+      } else if (e.key === "ArrowRight" && i < 5) {
+        e.preventDefault();
+        boxes[i + 1].focus();
+        boxes[i + 1].select();
+        state.codeBoxFocus = i + 1;
+      }
+    });
+    box.addEventListener("paste", (e) => {
+      const raw = e.clipboardData?.getData("text") || "";
+      if (!raw) return;
+      e.preventDefault();
+      const prefix = readBoxes().slice(0, i);
+      const next = normalizeJoinCode(prefix + raw);
+      sync(next, { focusIndex: Math.min(5, Math.max(0, next.length - 1)), joinIfFull: true });
+    });
+    box.addEventListener("focus", () => {
+      state.codeBoxFocus = i;
+    });
+  });
+
+  if (hidden) {
+    hidden.addEventListener("input", () => {
+      sync(hidden.value, { focusIndex: Math.min(5, normalizeJoinCode(hidden.value).length), joinIfFull: true });
+    });
+  }
+}
+
 function haptic(ms = 12) {
   try { navigator.vibrate?.(ms); } catch { /* not supported */ }
 }
@@ -310,14 +629,14 @@ function setToken(token, code) {
   if (code) localStorage.setItem(ROOM_KEY, code);
 }
 
-function showToast(msg) {
+function showToast(msg, { defer = false } = {}) {
   state.toast = msg;
-  render();
   clearTimeout(state.toastTimer);
   state.toastTimer = setTimeout(() => {
     state.toast = "";
     render();
   }, 1800);
+  if (!defer) render();
 }
 
 function setError(msg) {
@@ -345,6 +664,12 @@ function goHome({ clearToken = false } = {}) {
   state.prevTrickPeek = false;
   state.leaveConfirm = false;
   state.showRoomCode = false;
+  state.flourish = null;
+  clearTimeout(state.flourishTimer);
+  state.lobbySeen = false;
+  state.lobbySnapshot = null;
+  state.makeReady = false;
+  state.autoJoinLock = false;
   resetTrickAnim();
   releaseWakeLock();
   if (clearToken) {
@@ -397,6 +722,7 @@ function connect({ onOpen } = {}) {
     if (state.ws === ws) {
       state.ws = null;
       state.conn = state.screen === "home" ? "closed" : "reconnecting";
+      state.lobbySeen = false;
       render();
       scheduleReconnect();
     }
@@ -459,7 +785,14 @@ function onMessage(msg) {
       state.scorePeek = false;
       state.prevTrickPeek = false;
       state.lastDealtKey = "";
+      state.flourish = null;
+      clearTimeout(state.flourishTimer);
+      state.makeReady = false;
+      state.makeToastKeys = new Set();
+      state.bidRevealKey = "";
+      state.scoreFloatKey = "";
       resetFlyAnim();
+      maybeLobbyToasts(msg);
     } else {
       state.screen = state.screen === "rules" ? "rules" : "play";
       if (state.screen !== "rules") state.rulesReturn = "play";
@@ -467,12 +800,21 @@ function onMessage(msg) {
         state.bidValue = null;
         state.seenBustKeys = new Set();
         state.explodingBustKeys = new Set();
+        state.flourish = null;
+        clearTimeout(state.flourishTimer);
+        if (msg.round < prevRound) {
+          state.makeToastKeys = new Set();
+          state.bidRevealKey = "";
+          state.scoreFloatKey = "";
+        }
       }
       if (msg.phase === "bidding" && state.bidValue != null && state.bidValue > msg.cardsDealt) state.bidValue = null;
       if (msg.phase !== "playing" || !msg.isMyTurn) state.selectedCardId = null;
       else if (state.selectedCardId && !(msg.legalCardIds || []).includes(state.selectedCardId)) {
         state.selectedCardId = null;
       }
+      maybeLobbyToasts(msg);
+      maybeCelebrateMake(msg);
       maybeAnnounceTurn(msg);
     }
     render();
@@ -526,6 +868,10 @@ async function pasteCode() {
     }
     state.joinCode = code;
     state.error = "";
+    if (code.length === 6) {
+      maybeAutoJoin(code);
+      return;
+    }
     showToast("已貼上 " + code);
     render();
   } catch {
@@ -982,11 +1328,7 @@ function renderHome() {
         <div style="height:14px"></div>
         <button class="btn btn-gold" data-act="create">開房</button>
         <div class="or-row">或者加入</div>
-        <div class="join-row">
-          <input id="code-input" maxlength="6" placeholder="房號" value="${escapeHtml(prefill)}" autocapitalize="characters" autocomplete="off" inputmode="text" enterkeyhint="go" />
-          <button type="button" class="btn btn-ghost" data-act="paste-code">貼上</button>
-          <button class="btn btn-ghost" data-act="join">加入</button>
-        </div>
+        ${codeBoxesHTML(prefill)}
         <p class="home-hint">開房之後把房號或連結傳俾朋友，佢哋輸入同一個號就可以一齊玩。第一次玩可以先睇遊戲規則。</p>
         <div class="error-line">${escapeHtml(state.error)}</div>
       </div>
@@ -1131,7 +1473,8 @@ function seatBidLine(p, v) {
   }
   const busted = p.tricksWon > p.bid;
   const explode = busted && markBustExplode(p, v);
-  const html = `<div class="seat-bidline${busted ? " busted" : ""}" aria-label="叫 ${p.bid} 贏 ${p.tricksWon}${busted ? "，爆咗" : ""}">
+  const reveal = bidRevealAttr(v, p._visualIndex || 0);
+  const html = `<div class="seat-bidline${busted ? " busted" : ""}${reveal.cls}" style="${reveal.style}" aria-label="叫 ${p.bid} 贏 ${p.tricksWon}${busted ? "，爆咗" : ""}">
     <span class="bid-call">叫 ${p.bid}</span>
     <span class="bid-sep">／</span>
     <span class="bid-won">贏 ${p.tricksWon}</span>
@@ -1306,7 +1649,9 @@ function circleTableHTML(v) {
     const isMe = p.id === v.yourId;
     const win = v.phase === "trickResult" && !destroyed && playerIndex === v.lastWinnerIndex;
     const st = playerSeatStatus(p, v);
+    p._visualIndex = i;
     const bidLine = seatBidLine(p, v);
+    const connected = playerConnected(p, v);
     const leadIndex = (v.trick || []).length
       ? v.trick[0].playerIndex
       : (v.phase === "playing" && !(v.trick || []).length ? v.currentPlayerIndex : -1);
@@ -1314,7 +1659,9 @@ function circleTableHTML(v) {
     const leadTag = !isLead || bidding ? "" : ((v.trick || []).length ? "領牌" : "先出");
     let card = "";
     if (played) {
-      const slam = isJustPlayed(played.card.id) ? " slam" : "";
+      const justPlayed = isJustPlayed(played.card.id);
+      if (justPlayed) maybeSpecialFlourish(played);
+      const slam = justPlayed ? " slam" : "";
       card = `<button class="seat-card ${win ? "winner" : ""} ${destroyed ? "voided" : ""}${slam}" data-act="inspect" data-id="${escapeHtml(played.card.id)}" aria-label="睇呢張牌">
            ${cardFaceHTML(played.card, { tigressAsPirate: played.tigressAsPirate, compact: true })}
            ${win ? `<div class="seat-win">贏</div>` : ""}
@@ -1330,8 +1677,12 @@ function circleTableHTML(v) {
       style="left:${x.toFixed(2)}%;top:${y.toFixed(2)}%;--rot:${rot}deg;z-index:${z}">
       ${card}
       ${bidLine.explode ? `<div class="bust-burst" aria-hidden="true"></div>` : ""}
+      ${scoreFloaterHTML(v, p.id, i)}
       <div class="seat-info">
-        <div class="avatar ${thinking ? "gold" : p.isAI ? "ai" : ""} ${win ? "win-ring" : ""}${bidLine.busted ? " bust-avatar" : ""}">${escapeHtml(p.name.slice(0, 1))}</div>
+        <div class="avatar-wrap">
+          <div class="avatar ${thinking ? "gold" : p.isAI ? "ai" : ""} ${win ? "win-ring" : ""}${bidLine.busted ? " bust-avatar" : ""}">${escapeHtml(p.name.slice(0, 1))}</div>
+          <span class="conn-dot ${connected ? "on" : "off"}" title="${connected ? (p.isAI ? "電腦" : "已連線") : "已斷線"}" aria-label="${connected ? (p.isAI ? "電腦" : "已連線") : "已斷線"}"></span>
+        </div>
         <div class="seat-meta">
           <div class="nm-row">
             <span class="nm">${escapeHtml(p.name)}${isMe ? "（你）" : ""}</span>
@@ -1339,24 +1690,33 @@ function circleTableHTML(v) {
             ${thinking ? `<span class="seat-thinking">諗緊</span>` : ""}
           </div>
           ${bidLine.html}
-          <div class="seat-sub">${st ? `<span class="st">${escapeHtml(st)}</span>` : ""}<span class="sc">${p.score} 分</span></div>
+          <div class="seat-sub">${st ? `<span class="st">${escapeHtml(st)}</span>` : ""}${!bidding && v.phase !== "roundResult" && v.phase !== "gameOver" && v.phase !== "lobby" ? handStackHTML(p.handCount) : ""}<span class="sc">${p.score} 分</span></div>
         </div>
       </div>
     </div>`;
   }).join("");
 
   let center = "";
+  const midTrick = (v.phase === "playing" || v.phase === "choosingTigress") && (v.trick || []).length;
+  const lead = midTrick ? v.currentTrickLead : null;
   if (destroyed) center = `<div class="table-center void">呢墩作廢，無人贏</div>`;
   else if (!(v.trick || []).length && bidding) center = `<div class="table-center dim">叫牌中<br /><span class="arrow-hint">順時針出牌</span></div>`;
   else if (!(v.trick || []).length) center = `<div class="table-center dim">呢墩尚未出牌<br /><span class="arrow-hint">順時針出牌</span></div>`;
-  else center = `<div class="table-center dim"><span class="arrow-hint">順時針</span></div>`;
+  else if (lead?.destroyed) center = `<div class="table-center lead void-soon">呢墩快將作廢</div>`;
+  else if (lead && lead.leading === false) center = `<div class="table-center lead dim">尚未有人領先</div>`;
+  else if (lead && (lead.playerName || lead.cardLabel)) {
+    const who = escapeHtml(lead.playerName || "");
+    const card = escapeHtml(lead.cardLabel || "");
+    const label = who && card ? `${who} · ${card}` : (who || card);
+    center = `<div class="table-center lead">而家最大：${label}</div>`;
+  } else center = `<div class="table-center dim"><span class="arrow-hint">順時針</span></div>`;
 
   const suitClass = v.ledSuit && (v.phase === "playing" || v.phase === "choosingTigress" || v.phase === "trickResult")
     ? ` suit-${v.ledSuit}`
     : "";
   return `<div class="circle-wrap">
     <div class="circle-table n-${n} ${destroyed ? "destroyed" : ""}" role="group" aria-label="牌桌，出牌順序順時針">
-      <div class="table-felt${suitClass}">${tableArrowsSVG()}${center}</div>
+      <div class="table-felt${suitClass}">${tableArrowsSVG()}${center}${flourishBannerHTML()}</div>
       ${seats}
     </div>
   </div>`;
@@ -1528,7 +1888,9 @@ function renderTable() {
     const n = v.cardsDealt;
     const btns = Array.from({ length: n + 1 }, (_, i) => {
       const on = state.bidValue === i ? "on" : "";
-      return `<button class="${on}" data-act="bid-pick" data-n="${i}">${i}</button>`;
+      const zero = i === 0 ? " bid-zero" : "";
+      const label = i === 0 ? `<span class="bid-n">0</span><span class="bid-cue">估唔贏</span>` : String(i);
+      return `<button type="button" class="${on}${zero}" data-act="bid-pick" data-n="${i}">${label}</button>`;
     }).join("");
     const bidCount = (v.players || []).filter((p) => p.hasBid).length;
     const bidTotal = (v.players || []).length;
@@ -1627,6 +1989,7 @@ function renderTable() {
         </div>
         <div class="center">
           <div class="round">第 ${v.round} 局／10</div>
+          ${roundRailHTML(v)}
           <div class="sub">${(() => {
             const total = v.tricksTotal || v.cardsDealt;
             if (v.phase === 'bidding') return '各 ' + v.cardsDealt + ' 張 · 叫牌中';
@@ -1805,6 +2168,7 @@ function render() {
   app.innerHTML = html;
   if (screen === "play") applyFlyAnim(state.view);
   bindCardLongPress();
+  bindCodeBoxes();
   scrollPlayableIntoView();
   syncWakeLock();
 }
