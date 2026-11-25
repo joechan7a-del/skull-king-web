@@ -36,12 +36,40 @@ test("in-game primary controls overlay a reserved dock and do not shrink the tab
   assert.match(dock, /bottom:\s*0/);
   const screen = block(css, ".table-screen");
   assert.match(screen, /--dock-reserve/);
+  assert.match(screen, /--cue-reserve/);
   const wrap = block(css, ".circle-wrap");
   assert.match(wrap, /flex:\s*1 1 auto/);
   assert.match(wrap, /--dock-reserve/);
   const min = wrap.match(/min-height:\s*(\d+)px/);
   assert.ok(min, "circle-wrap should have a compact min-height");
   assert.ok(Number(min[1]) <= 180, `table min-height ${min[1]}px is too tall to keep bids and the hand on screen`);
+});
+
+test("the felt keeps a locked mid-trick proportion on every in-game screen", () => {
+  const screen = block(css, ".table-screen");
+  assert.match(screen, /--cue-reserve:\s*60px/);
+  assert.match(screen, /--dock-reserve:\s*208px/);
+  const slot = block(css, ".table-top-slot");
+  assert.match(slot, /flex:\s*0 0 var\(--cue-reserve\)/);
+  assert.match(slot, /height:\s*var\(--cue-reserve\)/);
+  assert.match(slot, /max-height:\s*var\(--cue-reserve\)/);
+  const wrap = block(css, ".circle-wrap");
+  assert.match(wrap, /margin:\s*2px 0 var\(--dock-reserve, 208px\) 0/);
+  const render = js.slice(js.indexOf("function renderTable"), js.indexOf("function handOverlap"));
+  assert.match(render, /class="table-top-slot"/);
+  assert.match(render, /table-top-slot">\$\{bidTotalChipHTML\(v\)\}\$\{tableCuesRowHTML\(v\)\}</);
+  assert.match(render, /circleTableHTML\(v\)/);
+  const dockChunk = render.slice(render.indexOf("table-dock"), render.indexOf("pendingTigress"));
+  assert.doesNotMatch(dockChunk, /circleTableHTML/);
+  assert.match(html, /app\.js\?v=c18/);
+  // overlays must stay out of the table flex flow
+  assert.match(css, /\.confirm-bar\s*\{[^}]*position:\s*absolute/s);
+  const banner = block(css, ".banner");
+  assert.match(banner, /position:\s*absolute/);
+  const fl = block(css, ".flourish-overlay");
+  assert.match(fl, /position:\s*absolute/);
+  const dock = block(css, ".table-dock");
+  assert.match(dock, /position:\s*absolute/);
 });
 
 test("home cover shrinks to leave room for 開房, join, and 遊戲規則", () => {
@@ -153,7 +181,7 @@ test("trick and round results are overlay dialogs and do not shrink the table", 
   const score = js.slice(js.indexOf("function scoreHTML"), js.indexOf("function renderRules"));
   assert.match(score, /class="overlay center"/);
   assert.match(score, /下一局/);
-  assert.match(html, /app\.js\?v=c17/);
+  assert.match(html, /app\.js\?v=c18/);
 });
 
 test("AI plays and post-win pauses are modestly longer", () => {

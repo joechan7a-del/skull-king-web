@@ -432,11 +432,32 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
 .table-screen {
   position: relative;
   --dock-reserve: 208px;
+  --cue-reserve: 60px;
   padding-top: calc(6px + var(--safe-top));
   padding-bottom: calc(6px + var(--safe-bottom));
   padding-left: 10px;
   padding-right: 10px;
   overflow: hidden;
+}
+.table-top-slot {
+  flex: 0 0 var(--cue-reserve);
+  height: var(--cue-reserve);
+  max-height: var(--cue-reserve);
+  min-height: var(--cue-reserve);
+  position: relative;
+  z-index: 6;
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  pointer-events: none;
+}
+.table-top-slot .bid-total-chip,
+.table-top-slot .table-cues-row,
+.table-top-slot .table-status-chip,
+.table-top-slot .last-trick-cue,
+.table-top-slot button {
+  pointer-events: auto;
 }
 .table-dock {
   position: absolute;
@@ -2575,6 +2596,10 @@ body.dragging-card { cursor: grabbing; }
   gap: 6px;
   padding: 0 8px 2px;
   min-height: 0;
+}
+.table-top-slot .table-cues-row,
+.table-top-slot .bid-total-chip {
+  flex-shrink: 0;
 }
 .table-status-chip {
   font-size: 12px;

@@ -2669,8 +2669,7 @@ function renderTable() {
           <button class="btn-text" data-act="rules">規則</button>
         </div>
       </div>
-      ${bidTotalChipHTML(v)}
-      ${tableCuesRowHTML(v)}
+      <div class="table-top-slot">${bidTotalChipHTML(v)}${tableCuesRowHTML(v)}</div>
       ${circleTableHTML(v)}
       <div class="table-dock">
         ${prevTrickButtonHTML(v)}
