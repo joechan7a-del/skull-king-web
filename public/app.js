@@ -2123,22 +2123,31 @@ function isPlayerThinking(p, v) {
 function tableArrowsSVG() {
   const cx = 50;
   const cy = 50;
-  const rx = 34;
-  const ry = 31;
-  const n = 8;
+  const rx = 30;
+  const ry = 27;
+  const count = 3;
+  const sweepDeg = 74;
+  const paths = [];
   const heads = [];
-  for (let i = 0; i < n; i++) {
-    const t = (i + 0.5) / n;
-    const a = (90 + t * 360) * Math.PI / 180;
-    const x = cx + rx * Math.cos(a);
-    const y = cy + ry * Math.sin(a);
-    const rot = Math.atan2(ry * Math.cos(a), -rx * Math.sin(a)) * 180 / Math.PI;
+  for (let i = 0; i < count; i++) {
+    const gap = 360 / count;
+    const startDeg = 90 + i * gap + (gap - sweepDeg) / 2;
+    const a0 = (startDeg * Math.PI) / 180;
+    const a1 = ((startDeg + sweepDeg) * Math.PI) / 180;
+    const x0 = cx + rx * Math.cos(a0);
+    const y0 = cy + ry * Math.sin(a0);
+    const x1 = cx + rx * Math.cos(a1);
+    const y1 = cy + ry * Math.sin(a1);
+    const rot = Math.atan2(ry * Math.cos(a1), -rx * Math.sin(a1)) * 180 / Math.PI;
+    paths.push(
+      `<path d="M ${x0.toFixed(2)} ${y0.toFixed(2)} A ${rx} ${ry} 0 0 1 ${x1.toFixed(2)} ${y1.toFixed(2)}" />`,
+    );
     heads.push(
-      `<polygon points="0,0 -3.4,-2 -3.4,2" transform="translate(${x.toFixed(2)} ${y.toFixed(2)}) rotate(${rot.toFixed(2)})" />`,
+      `<polygon points="0,0 -10,-5.8 -6.5,0 -10,5.8" transform="translate(${x1.toFixed(2)} ${y1.toFixed(2)}) rotate(${rot.toFixed(2)})" />`,
     );
   }
   return `<svg class="table-arrows" viewBox="0 0 100 100" aria-hidden="true">
-    <ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="none" stroke="rgba(237,191,89,0.55)" stroke-width="0.85" />
+    <g fill="none" stroke="#edbf59" stroke-width="2.8" stroke-linecap="round">${paths.join("")}</g>
     <g fill="#edbf59">${heads.join("")}</g>
   </svg>`;
 }

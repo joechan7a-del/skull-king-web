@@ -124,3 +124,14 @@ test("every game sound reuses the soft UI click", () => {
   assert.doesNotMatch(js, /playSound\("flip"\)/);
   assert.doesNotMatch(js, /createOscillator/);
 });
+
+test("tableArrowsSVG uses three large clockwise arrows", () => {
+  const fn = js.slice(js.indexOf("function tableArrowsSVG"), js.indexOf("function resetTrickAnim"));
+  assert.match(fn, /const count = 3/);
+  assert.doesNotMatch(fn, /const n = 8/);
+  assert.doesNotMatch(fn, /-3\.4,-2/);
+  assert.match(fn, /A \$\{rx\} \$\{ry\} 0 0 1/);
+  assert.match(fn, /-10,-5\.8/);
+  assert.match(js, /arrow-hint">順時針/);
+  assert.match(css, /\.table-arrows/);
+});

@@ -638,7 +638,7 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   pointer-events: none;
   overflow: visible;
   z-index: 1;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.4));
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.7));
 }
 .table-center {
   position: absolute;
@@ -661,10 +661,10 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
 .arrow-hint {
   display: inline-block;
   margin-top: 2px;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  color: rgba(237, 191, 89, 0.8);
-  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  color: #edbf59;
+  font-weight: 800;
 }
 
 .seat {
