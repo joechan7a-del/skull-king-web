@@ -16,6 +16,10 @@ const state = {
   joinCode: "",
   bidValue: null,
   inspect: null,
+  selectedCardId: null,
+  trickAnimReady: false,
+  seenTrickCardIds: new Set(),
+  animatingPlayIds: new Set(),
   lastRound: 1,
   error: "",
   toast: "",
@@ -26,6 +30,59 @@ const state = {
 };
 
 const app = document.getElementById("app");
+
+const CARD_FLIP_MP3 = "/sounds/card-flip.mp3";
+const CARD_FLIP_OGG = "/sounds/card-flip.ogg";
+const flipPool = [];
+let cardAudioUnlocked = false;
+
+function makeCardFlipAudio() {
+  const a = new Audio();
+  if (a.canPlayType("audio/mpeg")) a.src = CARD_FLIP_MP3;
+  else a.src = CARD_FLIP_OGG;
+  a.preload = "auto";
+  a.volume = 0.4;
+  return a;
+}
+
+function unlockCardAudio() {
+  if (cardAudioUnlocked) return;
+  const a = flipPool[0] || (flipPool[0] = makeCardFlipAudio());
+  const vol = a.volume;
+  a.volume = 0;
+  const p = a.play();
+  if (p && p.then) {
+    p.then(() => {
+      a.pause();
+      a.currentTime = 0;
+      a.volume = vol || 0.4;
+      cardAudioUnlocked = true;
+    }).catch(() => {
+      a.volume = vol || 0.4;
+    });
+  } else {
+    a.volume = vol || 0.4;
+  }
+}
+
+function playCardFlip() {
+  try {
+    unlockCardAudio();
+    let a = flipPool.find((x) => x.paused || x.ended);
+    if (!a) {
+      if (flipPool.length >= 3) a = flipPool[0];
+      else {
+        a = makeCardFlipAudio();
+        flipPool.push(a);
+      }
+    }
+    a.volume = 0.4;
+    a.currentTime = 0;
+    a.play().catch(() => {});
+  } catch {
+    /* autoplay or missing file should never block play */
+  }
+}
 
 function pathCode() {
   const m = location.pathname.match(/^\/r\/([A-Za-z0-9]+)/i);
@@ -78,6 +135,9 @@ function goHome({ clearToken = false } = {}) {
   state.view = null;
   state.error = "";
   state.pendingRoom = "";
+  state.selectedCardId = null;
+  state.inspect = null;
+  resetTrickAnim();
   if (clearToken) {
     setToken("", "");
     localStorage.removeItem(ROOM_KEY);
@@ -182,11 +242,18 @@ function onMessage(msg) {
     if (msg.phase === "lobby" || !msg.inGame) {
       state.screen = state.screen === "rules" ? "rules" : "lobby";
       if (state.screen !== "rules") state.rulesReturn = "lobby";
+      state.trickAnimReady = false;
+      state.seenTrickCardIds = new Set();
+      state.animatingPlayIds = new Set();
     } else {
       state.screen = state.screen === "rules" ? "rules" : "play";
       if (state.screen !== "rules") state.rulesReturn = "play";
       if (prevRound && msg.round !== prevRound) state.bidValue = null;
       if (msg.phase === "bidding" && state.bidValue != null && state.bidValue > msg.cardsDealt) state.bidValue = null;
+      if (msg.phase !== "playing" || !msg.isMyTurn) state.selectedCardId = null;
+      else if (state.selectedCardId && !(msg.legalCardIds || []).includes(state.selectedCardId)) {
+        state.selectedCardId = null;
+      }
     }
     render();
   }
@@ -295,10 +362,12 @@ function discardSavedGame() {
 }
 
 // Event delegation
+app.addEventListener("pointerdown", unlockCardAudio, { passive: true });
 app.addEventListener("click", (e) => {
   const t = e.target.closest("[data-act]");
   if (!t) return;
-  if (t.dataset.act === "close-inspect" && e.target.closest("[data-stop]")) return;
+  // Only ignore backdrop taps that land inside the sheet; 知道喇 itself must still close.
+  if (t.classList.contains("overlay") && e.target.closest("[data-stop]")) return;
   const act = t.dataset.act;
   const view = state.view;
   if (act === "create") createRoom();
@@ -309,6 +378,7 @@ app.addEventListener("click", (e) => {
   else if (act === "discard-session") discardSavedGame();
   else if (act === "inspect") {
     e.stopPropagation();
+    if (!e.target.closest(".card-info")) playCardFlip();
     openInspect(t.dataset.id, t.dataset.why || "");
     return;
   }
@@ -334,10 +404,44 @@ app.addEventListener("click", (e) => {
     if (state.bidValue == null) { setError("請先揀你叫幾多墩。"); return; }
     send({ type: "bid", value: state.bidValue });
   }
-  else if (act === "play-card") {
+  else if (act === "select-card" || act === "play-card") {
     const id = t.dataset.id;
+    const legal = new Set(view?.legalCardIds || []);
+    state.inspect = null;
+    playCardFlip();
+    if (view?.phase !== "playing" || !view?.isMyTurn || !legal.has(id)) {
+      openInspect(id, t.dataset.why || "");
+      return;
+    }
+    state.selectedCardId = state.selectedCardId === id ? null : id;
+    render();
+    return;
+  }
+  else if (act === "confirm-play") {
+    if (!state.selectedCardId) return;
+    const id = state.selectedCardId;
+    state.selectedCardId = null;
     state.inspect = null;
     send({ type: "play", cardId: id });
+  }
+  else if (act === "confirm-tig-pirate") {
+    if (!state.selectedCardId) return;
+    const id = state.selectedCardId;
+    state.selectedCardId = null;
+    state.inspect = null;
+    send({ type: "play", cardId: id, tigressAsPirate: true });
+  }
+  else if (act === "confirm-tig-escape") {
+    if (!state.selectedCardId) return;
+    const id = state.selectedCardId;
+    state.selectedCardId = null;
+    state.inspect = null;
+    send({ type: "play", cardId: id, tigressAsPirate: false });
+  }
+  else if (act === "cancel-play") {
+    state.selectedCardId = null;
+    render();
+    return;
   }
   else if (act === "tig-pirate") send({ type: "resolveTigress", asPirate: true });
   else if (act === "tig-escape") send({ type: "resolveTigress", asPirate: false });
@@ -458,7 +562,7 @@ function inspectHTML() {
         <h2>特殊牌係咩？</h2>
         <p>特殊牌隨時可以出，唔使跟花。撳手牌右上角嘅「？」可以隨時再睇。</p>
         <div class="legend-list">${items}</div>
-        <button class="btn btn-gold" data-act="close-inspect">知道喇</button>
+        <button class="btn btn-sheet" data-act="close-inspect">知道喇</button>
       </div>
     </div>`;
   }
@@ -473,8 +577,8 @@ function inspectHTML() {
       <h2>${escapeHtml(title)}</h2>
       <p>${escapeHtml(help)}</p>
       ${ins.why ? `<p class="why-line">${escapeHtml(ins.why)}</p>` : ""}
-      ${ins.canPlay ? `<button class="btn btn-gold" data-act="play-card" data-id="${escapeHtml(card.id)}">出呢張</button><div style="height:10px"></div>` : ""}
-      <button class="btn ${ins.canPlay ? "btn-ghost" : "btn-gold"}" data-act="close-inspect">知道喇</button>
+      ${ins.canPlay ? `<button class="btn btn-gold" data-act="select-card" data-id="${escapeHtml(card.id)}">出呢張</button><div style="height:10px"></div>` : ""}
+      <button class="btn btn-sheet" data-act="close-inspect">知道喇</button>
     </div>
   </div>`;
 }
@@ -652,8 +756,8 @@ function isPlayerThinking(p, v) {
 function tableArrowsSVG() {
   const cx = 50;
   const cy = 50;
-  const rx = 41;
-  const ry = 37;
+  const rx = 34;
+  const ry = 31;
   const n = 8;
   const heads = [];
   for (let i = 0; i < n; i++) {
@@ -672,6 +776,35 @@ function tableArrowsSVG() {
   </svg>`;
 }
 
+function resetTrickAnim() {
+  state.trickAnimReady = false;
+  state.seenTrickCardIds = new Set();
+  state.animatingPlayIds = new Set();
+}
+
+function syncTrickAnim(v) {
+  const ids = (v.trick || []).map((played) => played.card.id);
+  if (!ids.length) {
+    state.seenTrickCardIds = new Set();
+    return;
+  }
+  if (!state.trickAnimReady) {
+    state.seenTrickCardIds = new Set(ids);
+    state.trickAnimReady = true;
+  }
+}
+
+function isJustPlayed(cardId) {
+  if (!cardId) return false;
+  if (state.animatingPlayIds.has(cardId)) return true;
+  if (state.seenTrickCardIds.has(cardId)) return false;
+  state.seenTrickCardIds.add(cardId);
+  state.animatingPlayIds.add(cardId);
+  playCardFlip();
+  setTimeout(() => state.animatingPlayIds.delete(cardId), 500);
+  return true;
+}
+
 function circleTableHTML(v) {
   const players = v.players || [];
   const n = Math.max(players.length, 1);
@@ -680,9 +813,11 @@ function circleTableHTML(v) {
   const bidding = v.phase === "bidding";
   const destroyed = v.phase === "trickResult" && v.lastTrickDestroyed;
   const trickByPlayer = new Map((v.trick || []).map((played) => [played.playerIndex, played]));
-  const rx = n === 2 ? 0 : n >= 6 ? 39 : 40;
-  const ry = n === 2 ? 36 : n >= 5 ? 35 : 36;
+  const rx = n === 2 ? 0 : n >= 6 ? 36 : 37;
+  const ry = n === 2 ? 30 : n >= 5 ? 30 : 31;
 
+  const showSlots = v.phase === "playing" || v.phase === "choosingTigress" || v.phase === "trickResult";
+  syncTrickAnim(v);
   const seats = players.map((_, i) => {
     const playerIndex = (myIndex + i) % n;
     const p = players[playerIndex];
@@ -696,21 +831,29 @@ function circleTableHTML(v) {
     const isMe = p.id === v.yourId;
     const win = v.phase === "trickResult" && !destroyed && playerIndex === v.lastWinnerIndex;
     const st = playerSeatStatus(p, v);
-    const card = played
-      ? `<button class="seat-card ${win ? "winner" : ""} ${destroyed ? "voided" : ""}" data-act="inspect" data-id="${escapeHtml(played.card.id)}" aria-label="睇呢張牌">
+    let card = "";
+    if (played) {
+      const slam = isJustPlayed(played.card.id) ? " slam" : "";
+      card = `<button class="seat-card ${win ? "winner" : ""} ${destroyed ? "voided" : ""}${slam}" data-act="inspect" data-id="${escapeHtml(played.card.id)}" aria-label="睇呢張牌">
            ${cardFaceHTML(played.card, { tigressAsPirate: played.tigressAsPirate, compact: true })}
            ${win ? `<div class="seat-win">贏</div>` : ""}
-         </button>`
-      : `<div class="seat-card empty"><div class="card-slot" aria-hidden="true"></div></div>`;
-    return `<div class="seat ${thinking ? "thinking" : ""} ${isMe ? "is-me" : ""} ${win ? "winner" : ""} ${p.isAI ? "ai-seat" : ""}"
-      style="left:${x.toFixed(2)}%;top:${y.toFixed(2)}%;--rot:${rot}deg;z-index:${thinking ? 6 : 2}">
+         </button>`;
+    } else if (showSlots) {
+      card = `<div class="seat-card empty"><div class="card-slot" aria-hidden="true"></div></div>`;
+    }
+    const celebrate = win ? " winner-celebrate" : "";
+    return `<div class="seat ${thinking ? "thinking" : ""} ${isMe ? "is-me" : ""} ${win ? "winner" : ""}${celebrate} ${p.isAI ? "ai-seat" : ""}"
+      style="left:${x.toFixed(2)}%;top:${y.toFixed(2)}%;--rot:${rot}deg;z-index:${win ? 7 : thinking ? 6 : 2}">
       ${card}
       <div class="seat-info">
-        <div class="avatar ${thinking ? "gold" : p.isAI ? "ai" : ""}">${escapeHtml(p.name.slice(0, 1))}</div>
-        <div class="nm">${escapeHtml(p.name)}${isMe ? "（你）" : ""}</div>
-        <div class="st">${escapeHtml(st)}</div>
-        <div class="sc">${p.score} 分</div>
-        ${thinking ? `<div class="seat-thinking">諗緊</div>` : ""}
+        <div class="avatar ${thinking ? "gold" : p.isAI ? "ai" : ""} ${win ? "win-ring" : ""}">${escapeHtml(p.name.slice(0, 1))}</div>
+        <div class="seat-meta">
+          <div class="nm-row">
+            <span class="nm">${escapeHtml(p.name)}${isMe ? "（你）" : ""}</span>
+            ${thinking ? `<span class="seat-thinking">諗緊</span>` : ""}
+          </div>
+          <div class="seat-sub"><span class="st">${escapeHtml(st)}</span><span class="sc">${p.score} 分</span></div>
+        </div>
       </div>
     </div>`;
   }).join("");
@@ -721,15 +864,71 @@ function circleTableHTML(v) {
   else if (!(v.trick || []).length) center = `<div class="table-center dim">呢墩尚未出牌<br /><span class="arrow-hint">順時針出牌</span></div>`;
   else center = `<div class="table-center dim"><span class="arrow-hint">順時針</span></div>`;
 
+  const suitClass = v.ledSuit && (v.phase === "playing" || v.phase === "choosingTigress" || v.phase === "trickResult")
+    ? ` suit-${v.ledSuit}`
+    : "";
   return `<div class="circle-wrap">
     <div class="circle-table n-${n} ${destroyed ? "destroyed" : ""}" role="group" aria-label="牌桌，出牌順序順時針">
-      <div class="table-felt">${tableArrowsSVG()}${center}</div>
+      <div class="table-felt${suitClass}">${tableArrowsSVG()}${center}</div>
       ${seats}
     </div>
   </div>`;
 }
 
+
+function tablePromptHTML(v, { bidding, alreadyBid } = {}) {
+  if (bidding) return "";
+  if (v.phase === "trickResult") {
+    return `<div class="turn-banner result">${escapeHtml(v.statusMessage || "")}</div>`;
+  }
+  if (v.phase === "playing" && v.isMyTurn) {
+    let text = "輪到你出牌。";
+    if (v.ledSuit) text += `而家要跟${suitLabel(v.ledSuit)}。你有呢種花就要跟；特殊牌隨時可出。`;
+    else if (!(v.trick || []).length) text += "由你先出呢一墩。第一張有花色嘅牌會定花；特殊牌先出就冇得跟花。";
+    else text += "呢墩由特殊牌先出，冇得跟花，可以出任何牌。";
+    return `<div class="turn-banner mine">${escapeHtml(text)}</div>`;
+  }
+  if (v.phase === "playing" || v.phase === "choosingTigress") {
+    const cur = (v.players || [])[v.currentPlayerIndex];
+    const name = cur?.name || "對手";
+    let text;
+    if (v.phase === "choosingTigress") text = `等${name}揀母老虎當海盜定逃脫。`;
+    else if (v.ledSuit) text = `輪到${name}出牌。而家要跟${suitLabel(v.ledSuit)}。`;
+    else if (!(v.trick || []).length) text = `輪到${name}出牌。等佢出第一張先定花。`;
+    else text = `輪到${name}出牌。呢墩冇得跟花。`;
+    return `<div class="turn-banner wait">${escapeHtml(text)}</div>`;
+  }
+  return "";
+}
+
+function confirmBarHTML(v) {
+  if (!v.isMyTurn || v.phase !== "playing" || !state.selectedCardId) return "";
+  const card = (v.myHand || []).find((c) => c.id === state.selectedCardId);
+  if (!card) return "";
+  const name = card.special
+    ? (SPECIAL_INFO[card.special]?.chineseName || "")
+    : `${SUIT_INFO[card.suit]?.shortName || ""}${card.rank}`;
+  if (card.special === "tigress") {
+    return `<div class="confirm-bar">
+      <p>已揀<strong>母老虎</strong>。請宣布點出，確定之後先會出牌。</p>
+      <div class="confirm-actions">
+        <button class="btn btn-sheet" data-act="cancel-play">取消</button>
+        <button class="btn btn-gold" data-act="confirm-tig-pirate">確定當海盜出</button>
+        <button class="btn btn-ink" data-act="confirm-tig-escape">確定當逃脫出</button>
+      </div>
+    </div>`;
+  }
+  return `<div class="confirm-bar">
+    <p>已揀<strong>${escapeHtml(name)}</strong>。確定之後先會出牌。</p>
+    <div class="confirm-actions">
+      <button class="btn btn-sheet" data-act="cancel-play">取消</button>
+      <button class="btn btn-gold" data-act="confirm-play">確定出牌</button>
+    </div>
+  </div>`;
+}
+
 function renderTable() {
+
   const v = state.view;
   if (!v) return renderHome();
   const me = v.players?.find((p) => p.id === v.yourId);
@@ -761,15 +960,16 @@ function renderTable() {
     .map((c, i) => {
       const isLegal = canPlay && legal.has(c.id);
       const dim = canPlay && !legal.has(c.id);
+      const selected = isLegal && state.selectedCardId === c.id;
       const why = !isLegal ? cardPlayWhy(c, v) : "";
-      const style = `style="margin-right:${i === handCards.length - 1 ? 0 : overlap}px;z-index:${i}"`;
+      const style = `style="margin-right:${i === handCards.length - 1 ? 0 : overlap}px;z-index:${selected ? 20 : i}"`;
       const inner = cardFaceHTML(c, { dimmed: dim });
       const info = c.special
         ? `<button class="card-info" data-act="inspect" data-id="${escapeHtml(c.id)}" aria-label="睇牌義">?</button>`
         : "";
       if (isLegal) {
-        return `<div class="sk-wrap" ${style}>
-          <button class="sk-play" data-act="play-card" data-id="${escapeHtml(c.id)}">${inner.replace("sk-card ", "sk-card legal ")}</button>
+        return `<div class="sk-wrap${selected ? " selected" : ""}" ${style}>
+          <button class="sk-play" data-act="select-card" data-id="${escapeHtml(c.id)}">${inner.replace("sk-card ", `sk-card legal ${selected ? "picked " : ""}`)}</button>
           ${info}
         </div>`;
       }
@@ -784,21 +984,8 @@ function renderTable() {
     ? `<div class="next-trick"><button class="btn btn-ghost" data-act="continue">下一墩</button></div>`
     : "";
 
-  let turnBanner = "";
-  if (bidding && !alreadyBid) {
-    turnBanner = `<div class="turn-banner mine">輪到你叫牌。睇完手牌，估呢局會贏幾墩。</div>`;
-  } else if (v.phase === "playing" && v.isMyTurn) {
-    turnBanner = `<div class="turn-banner mine">輪到你出牌。${v.ledSuit ? `有${suitLabel(v.ledSuit)}就要跟，` : ""}特殊牌隨時可出。</div>`;
-  } else if (v.phase === "playing" || v.phase === "choosingTigress") {
-    const cur = (v.players || [])[v.currentPlayerIndex];
-    turnBanner = `<div class="turn-banner wait">等${escapeHtml(cur?.name || "對手")}出牌…</div>`;
-  } else if (v.phase === "trickResult") {
-    turnBanner = `<div class="turn-banner result">${escapeHtml(v.statusMessage || "")}</div>`;
-  }
-
-  const follow = v.followHint && (v.phase === "playing" || v.phase === "choosingTigress" || v.phase === "trickResult")
-    ? `<div class="follow-hint">${escapeHtml(v.followHint)}</div>`
-    : "";
+  const tablePrompt = tablePromptHTML(v, { bidding, alreadyBid });
+  const confirmBar = confirmBarHTML(v);
 
   return `
     ${bannerHTML()}
@@ -815,12 +1002,11 @@ function renderTable() {
         </div>
       </div>
       ${circleTableHTML(v)}
-      ${follow}
-      <div class="status">${escapeHtml(v.statusMessage || "")}</div>
+      ${tablePrompt}
       ${skipTrick}
       <div class="error-line">${escapeHtml(state.error)}</div>
       ${bidPanel}
-      ${turnBanner}
+      ${confirmBar}
       ${hand}
     </div>
     ${v.pendingTigress ? tigressHTML() : ""}
@@ -851,7 +1037,7 @@ function tigressHTML() {
         <button class="btn btn-ink" data-act="tig-escape">當逃脫出</button>
         <p class="tig-explain">同逃脫一樣，通常唔會贏墩。適合你已經贏夠，唔想再攞墩嘅時候。</p>
       </div>
-      <button class="btn-text" data-act="tig-cancel" style="width:100%;color:var(--ink-soft)">取消，換第二張</button>
+      <button class="btn btn-sheet" data-act="tig-cancel" style="width:100%">取消，換第二張</button>
     </div>
   </div>`;
 }
