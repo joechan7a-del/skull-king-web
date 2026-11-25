@@ -88,7 +88,7 @@ const SOUND_SRCS = {
 };
 const soundBank = {
   flip: { buffer: null, start: 0, fallback: [], volume: 0.55 },
-  click: { buffer: null, start: 0, fallback: [], volume: 0.32 },
+  click: { buffer: null, start: 0, fallback: [], volume: 0.22 },
 };
 let audioCtx = null;
 let soundsLoading = false;
