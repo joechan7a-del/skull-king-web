@@ -1853,12 +1853,22 @@ button, a, .btn, .btn-text, .sk-play, .sk-wrap, .seat-card, .code, input, .bid-g
   border: 1.5px solid rgba(237, 191, 89, 0.45);
   border-radius: 10px;
   caret-color: var(--gold);
+  -webkit-text-security: none;
 }
+.join-row .code-box { letter-spacing: 0; }
 .code-box:focus {
   outline: none;
   border-color: var(--gold);
   box-shadow: 0 0 0 3px rgba(237, 191, 89, 0.35);
   background: rgba(15, 36, 66, 0.9);
+}
+.code-box:-webkit-autofill,
+.code-box:-webkit-autofill:hover,
+.code-box:-webkit-autofill:focus,
+.code-input-sr:-webkit-autofill {
+  -webkit-text-fill-color: #fff;
+  caret-color: var(--gold);
+  transition: background-color 99999s ease-out;
 }
 .join-row .btn { width: auto; min-height: 48px; padding: 8px 12px; flex-shrink: 0; }
 
