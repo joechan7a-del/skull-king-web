@@ -2309,9 +2309,11 @@ function circleTableHTML(v) {
       }
       const slam = justPlayed ? " slam" : "";
       if (justPlayed && !isMe) arriveFlag = true;
-      card = `<button class="seat-card ${win ? "winner" : ""} ${destroyed ? "voided" : ""}${slam}" data-act="inspect" data-id="${escapeHtml(played.card.id)}" aria-label="睇呢張牌">
+      const voidCause = destroyed && isVoidCausePlay(played);
+      card = `<button class="seat-card ${win ? "winner" : ""} ${destroyed && !voidCause ? "voided" : ""}${voidCause ? " void-cause" : ""}${slam}" data-act="inspect" data-id="${escapeHtml(played.card.id)}" aria-label="睇呢張牌">
            ${cardFaceHTML(played.card, { tigressAsPirate: played.tigressAsPirate, compact: true })}
            ${win ? `<div class="seat-win">贏</div>` : ""}
+           ${voidCause ? `<div class="seat-win void-cause-tag">作廢</div>` : ""}
          </button>`;
     } else if (showSlots) {
       card = `<div class="seat-card empty"><div class="card-slot" aria-hidden="true"></div></div>`;
@@ -2320,7 +2322,8 @@ function circleTableHTML(v) {
     const celebrate = win ? " winner-celebrate" : "";
     const bustCls = bidLine.busted ? " busted" : "";
     const boomCls = bidLine.explode ? " bust-explode" : "";
-    const z = bidLine.explode ? 8 : win ? 7 : thinking ? 6 : 2;
+    const featured = win || (destroyed && played && isVoidCausePlay(played));
+    const z = bidLine.explode ? 8 : featured ? 7 : thinking ? 6 : 2;
     return `<div class="seat place-${place} ${thinking ? "thinking" : ""} ${isMe ? "is-me" : ""} ${win ? "winner" : ""}${celebrate}${arrive}${bustCls}${boomCls} ${p.isAI ? "ai-seat" : ""}"
       style="left:${x.toFixed(2)}%;top:${y.toFixed(2)}%;--rot:${rot}deg;z-index:${z}">
       ${card}
@@ -2363,8 +2366,20 @@ function circleTableHTML(v) {
 }
 
 
+function isVoidCausePlay(played) {
+  const special = played?.card?.special;
+  return special === "kraken" || special === "whiteWhale";
+}
+
+function trickResultFeaturedPlays(v) {
+  const trick = v?.trick || [];
+  if (v.lastTrickDestroyed) return trick.filter(isVoidCausePlay);
+  if (v.lastWinnerIndex == null) return [];
+  return trick.filter((p) => p.playerIndex === v.lastWinnerIndex);
+}
+
 function trickResultOverlayHTML(v) {
-  if (!v || v.phase !== "trickResult") return "";
+  if (!v || v.phase !== "trickResult" || !v.showTrickExplanation) return "";
   maybeWinBuzz(v);
   const meIndex = (v.players || []).findIndex((p) => p.id === v.yourId);
   const mine = !v.lastTrickDestroyed && meIndex >= 0 && meIndex === v.lastWinnerIndex;
@@ -2380,11 +2395,25 @@ function trickResultOverlayHTML(v) {
   const details = (!v.lastTrickDestroyed && (v.lastTrickDetails || []).length)
     ? `<div class="bonus-banner" role="status">${(v.lastTrickDetails || []).map((d) => `<span class="bonus-chip">${escapeHtml(d)}</span>`).join("")}</div>`
     : "";
-  return `<div class="overlay center trick-result-overlay" role="dialog" aria-modal="true" aria-labelledby="trick-result-title">
+  const featured = trickResultFeaturedPlays(v);
+  const cards = featured.length
+    ? `<div class="trick-result-cards" aria-hidden="false">${featured.map((p) => {
+        const kind = v.lastTrickDestroyed ? "void-cause" : "winner";
+        const who = escapeHtml(p.playerName || (v.players || [])[p.playerIndex]?.name || "");
+        return `<div class="trick-result-card" data-featured="${kind}">
+          ${cardFaceHTML(p.card, { tigressAsPirate: p.tigressAsPirate, compact: true })}
+          ${who ? `<div class="trick-result-card-name">${who}</div>` : ""}
+        </div>`;
+      }).join("")}</div>`
+    : "";
+  return `<div class="trick-result-overlay" role="dialog" aria-modal="false" aria-labelledby="trick-result-title">
     <div class="sheet trick-result-sheet" data-stop="1">
-      <h2 id="trick-result-title">${escapeHtml(title)}</h2>
-      ${why}
-      ${details}
+      ${cards}
+      <div class="trick-result-copy">
+        <h2 id="trick-result-title">${escapeHtml(title)}</h2>
+        ${why}
+        ${details}
+      </div>
       <button type="button" class="btn btn-gold" data-act="continue">下一墩</button>
     </div>
   </div>`;
@@ -2681,9 +2710,9 @@ function renderTable() {
         ${handTray}
         ${hand}
       </div>
+      ${trickResultOverlayHTML(v)}
     </div>
     ${v.pendingTigress ? tigressHTML() : ""}
-    ${trickResultOverlayHTML(v)}
     ${v.phase === "roundResult" || v.phase === "gameOver" ? scoreHTML(v) : ""}
     ${scorePeekHTML(v)}
     ${prevTrickSheetHTML(v)}

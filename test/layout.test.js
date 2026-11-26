@@ -61,7 +61,7 @@ test("the felt keeps a locked mid-trick proportion on every in-game screen", () 
   assert.match(render, /circleTableHTML\(v\)/);
   const dockChunk = render.slice(render.indexOf("table-dock"), render.indexOf("pendingTigress"));
   assert.doesNotMatch(dockChunk, /circleTableHTML/);
-  assert.match(html, /app\.js\?v=c18/);
+  assert.match(html, /app\.js\?v=c19/);
   // overlays must stay out of the table flex flow
   assert.match(css, /\.confirm-bar\s*\{[^}]*position:\s*absolute/s);
   const banner = block(css, ".banner");
@@ -171,27 +171,45 @@ test("tableArrowsSVG uses one thin clockwise arc without a 順時針 label", () 
 test("trick and round results are overlay dialogs and do not shrink the table", () => {
   assert.match(js, /function trickResultOverlayHTML/);
   assert.match(js, /trick-result-overlay/);
+  assert.match(js, /showTrickExplanation/);
+  assert.match(js, /trick-result-cards/);
+  assert.match(js, /data-featured="\$\{kind\}"/);
+  assert.match(js, /void-cause/);
+  assert.match(js, /win \? "winner"/);
   const render = js.slice(js.indexOf("function renderTable"), js.indexOf("function handOverlap"));
   assert.match(render, /\$\{trickResultOverlayHTML\(v\)\}/);
   assert.doesNotMatch(render, /class="next-trick"/);
   assert.doesNotMatch(render, /tablePromptHTML/);
-  const dock = render.slice(render.indexOf("table-dock"), render.indexOf("pendingTigress"));
-  assert.doesNotMatch(dock, /trickResultOverlayHTML/);
-  assert.doesNotMatch(dock, /scoreHTML/);
+  const overlayFn = js.slice(js.indexOf("function trickResultOverlayHTML"), js.indexOf("function myBidTrackHTML"));
+  assert.doesNotMatch(overlayFn, /class="overlay center trick-result-overlay"/);
+  assert.match(css, /\.trick-result-overlay/);
+  const bar = block(css, ".trick-result-overlay");
+  assert.match(bar, /position:\s*absolute/);
+  assert.match(bar, /bottom:\s*var\(--dock-reserve/);
+  assert.match(bar, /background:\s*none/);
+  const winCard = css.slice(css.indexOf(".seat-card.winner .sk-card"));
+  assert.match(winCard.slice(0, 500), /scale\(1\.12\)/);
+  assert.match(winCard.slice(0, 500), /aspect-ratio:\s*2\.4\s*\/\s*3\.5/);
   const score = js.slice(js.indexOf("function scoreHTML"), js.indexOf("function renderRules"));
   assert.match(score, /class="overlay center"/);
   assert.match(score, /下一局/);
-  assert.match(html, /app\.js\?v=c18/);
+  assert.match(html, /app\.js\?v=c19/);
 });
 
 test("AI plays and post-win pauses are modestly longer", () => {
   const rooms = readFileSync(join(root, "server/rooms.js"), "utf8");
   const ai = rooms.match(/const AI_PAUSE_MS = (\d+)/);
   const trick = rooms.match(/const TRICK_PAUSE_MS = (\d+)/);
+  const review = rooms.match(/export const TRICK_REVIEW_MS = (\d+)/);
+  const flourish = rooms.match(/export const FLOURISH_HOLD_MS = (\d+)/);
   assert.ok(ai, "AI_PAUSE_MS");
   assert.ok(trick, "TRICK_PAUSE_MS");
+  assert.ok(review, "TRICK_REVIEW_MS");
+  assert.ok(flourish, "FLOURISH_HOLD_MS");
   assert.ok(Number(ai[1]) >= 1100 && Number(ai[1]) <= 1800, `AI play pause ${ai[1]}`);
   assert.ok(Number(trick[1]) >= 3500 && Number(trick[1]) <= 5500, `trick pause ${trick[1]}`);
+  assert.ok(Number(review[1]) >= 1500 && Number(review[1]) <= 2000, `trick review ${review[1]}`);
+  assert.equal(Number(flourish[1]), 1050);
 });
 
 test("the confirm-to-play bar overlays the dock and does not shrink the table", () => {

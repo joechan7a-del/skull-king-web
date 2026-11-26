@@ -5,8 +5,28 @@ import { AI_NAMES } from "./ai.js";
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const ROOM_TTL_MS = 3 * 60 * 60 * 1000;
 const EMPTY_TTL_MS = 20 * 60 * 1000;
-const TRICK_PAUSE_MS = 4000; // was 2800; give a moment to read who won
+const TRICK_PAUSE_MS = 4000; // time to read the explanation after it appears; do not shorten
 const AI_PAUSE_MS = 1200; // plays only (bids stay immediate); easier to follow, not sluggish
+/** Look-at-the-completed-trick beat before the winner/void overlay. Mid of the requested 1.5–2s. */
+export const TRICK_REVIEW_MS = 1800;
+/** Matches the client flourish banner length in public/app.js (maybeSpecialFlourish). */
+export const FLOURISH_HOLD_MS = 1050;
+
+const FLOURISH_SPECIALS = new Set(["mermaid", "pirate", "skullKing", "kraken", "whiteWhale"]);
+
+export function playHasFlourish(played) {
+  if (!played?.card) return false;
+  if (played.card.special === "tigress") return played.tigressAsPirate === true;
+  return FLOURISH_SPECIALS.has(played.card.special);
+}
+
+export function trickReviewDelayMs(game) {
+  const trick = game?.lastTrick || [];
+  const last = trick[trick.length - 1];
+  return (playHasFlourish(last) ? FLOURISH_HOLD_MS : 0) + TRICK_REVIEW_MS;
+}
+
+export { TRICK_PAUSE_MS, AI_PAUSE_MS };
 
 export class RoomManager {
   constructor() {
@@ -209,8 +229,10 @@ export class RoomManager {
 
   play(room, playerId, cardId, tigressAsPirate) {
     if (!room.game) return { error: "遊戲尚未開始。" };
+    const prev = room.game.phase;
     const result = room.game.playCard(playerId, cardId, tigressAsPirate);
     if (result.error) return result;
+    this._syncTrickExplanation(room, prev);
     this.touch(room);
     this.schedule(room);
     return result;
@@ -218,8 +240,10 @@ export class RoomManager {
 
   resolveTigress(room, playerId, asPirate) {
     if (!room.game) return { error: "遊戲尚未開始。" };
+    const prev = room.game.phase;
     const result = room.game.resolveTigress(playerId, asPirate);
     if (result.error) return result;
+    this._syncTrickExplanation(room, prev);
     this.touch(room);
     this.schedule(room);
     return result;
@@ -236,6 +260,7 @@ export class RoomManager {
   continueRound(room, playerId) {
     if (!room.game) return { error: "遊戲尚未開始。" };
     if (room.game.phase === PHASE.TRICK_RESULT) {
+      if (!room.trickExplanationShown) return { ok: true, waiting: true };
       this._clearTimer(room);
       const result = room.game.advanceTrickResult();
       if (result.error) return result;
@@ -270,13 +295,31 @@ export class RoomManager {
     return result;
   }
 
+  _syncTrickExplanation(room, prevPhase) {
+    if (room.game?.phase === PHASE.TRICK_RESULT && prevPhase !== PHASE.TRICK_RESULT) {
+      room.trickExplanationShown = false;
+    }
+    if (room.game?.phase !== PHASE.TRICK_RESULT) room.trickExplanationShown = false;
+  }
+
   schedule(room) {
     this._clearTimer(room);
     const game = room.game;
     if (!game) return;
     if (game.phase === PHASE.TRICK_RESULT) {
+      if (!room.trickExplanationShown) {
+        const delay = trickReviewDelayMs(game);
+        room.timer = setTimeout(() => {
+          if (!room.game || room.game.phase !== PHASE.TRICK_RESULT) return;
+          room.trickExplanationShown = true;
+          this.broadcast(room);
+          this.schedule(room);
+        }, delay);
+        return;
+      }
       room.timer = setTimeout(() => {
         if (!room.game || room.game.phase !== PHASE.TRICK_RESULT) return;
+        room.trickExplanationShown = false;
         room.game.advanceTrickResult();
         this.broadcast(room);
         this.schedule(room);
@@ -288,7 +331,9 @@ export class RoomManager {
       if (current?.isAI) {
         room.timer = setTimeout(() => {
           if (!room.game || room.game.phase !== PHASE.PLAYING) return;
+          const prev = room.game.phase;
           room.game.stepAI();
+          this._syncTrickExplanation(room, prev);
           this.broadcast(room);
           this.schedule(room);
         }, AI_PAUSE_MS);
@@ -327,7 +372,12 @@ export class RoomManager {
         })),
       };
     }
-    return { ...base, ...room.game.viewFor(playerId), ...this._continueView(room) };
+    return {
+      ...base,
+      ...room.game.viewFor(playerId),
+      ...this._continueView(room),
+      showTrickExplanation: !!(room.game.phase === PHASE.TRICK_RESULT && room.trickExplanationShown),
+    };
   }
 
   _continueView(room) {

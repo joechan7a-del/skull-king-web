@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Game, PHASE } from "../server/game.js";
 import { scoreRound, winnerIndex, playedCard, makeSuit, makeSpecial } from "../server/rules.js";
-import { RoomManager } from "../server/rooms.js";
+import { RoomManager, playHasFlourish, trickReviewDelayMs, TRICK_REVIEW_MS, FLOURISH_HOLD_MS, TRICK_PAUSE_MS } from "../server/rooms.js";
 
 function seats(nHumans = 2, nAI = 2) {
   const s = [];
@@ -654,4 +654,55 @@ test("completed tricks keep an explanation and a round log", () => {
   assert.equal(v.roundTrickLog[0].winnerIndex, 1);
   assert.match(v.roundTrickLog[0].explanation, /跟黃花當中最大/);
   assert.equal(v.roundTrickLog[0].cards.length, 2);
+});
+
+test("the winner overlay waits to look at the completed trick, and the winning card stays presented", () => {
+  assert.equal(TRICK_REVIEW_MS, 1800);
+  assert.equal(FLOURISH_HOLD_MS, 1050);
+  assert.equal(TRICK_PAUSE_MS, 4000);
+  assert.equal(trickReviewDelayMs({ lastTrick: [{ card: { suit: "yellow", rank: 5 } }] }), 1800);
+  assert.equal(trickReviewDelayMs({ lastTrick: [{ card: { special: "kraken" } }] }), 1050 + 1800);
+  assert.equal(trickReviewDelayMs({ lastTrick: [{ card: { special: "whiteWhale" } }] }), 1050 + 1800);
+  assert.equal(trickReviewDelayMs({ lastTrick: [{ card: { special: "pirate" } }] }), 1050 + 1800);
+  assert.equal(playHasFlourish({ card: { special: "tigress" }, tigressAsPirate: true }), true);
+  assert.equal(playHasFlourish({ card: { special: "tigress" }, tigressAsPirate: false }), false);
+
+  const mgr = new RoomManager();
+  const { room, player: host } = mgr.createRoom({ name: "阿明" });
+  const guest = mgr.joinRoom({ code: room.code, name: "小芳" }).player;
+  host.connected = true;
+  guest.connected = true;
+  mgr.setSeats(room, host.id, 2);
+  mgr.setAiFill(room, host.id, false);
+  mgr.setReady(room, guest.id, true);
+  assert.equal(mgr.startGame(room, host.id).ok, true);
+  const g = room.game;
+  try {
+    g.players[0].hand = [makeSuit("yellow", 3)];
+    g.players[1].hand = [makeSuit("yellow", 12)];
+    g.players[0].bid = 0;
+    g.players[1].bid = 1;
+    g.phase = PHASE.PLAYING;
+    g.currentPlayerIndex = 1;
+    assert.equal(mgr.play(room, guest.id, "yellow-12").ok, true);
+    assert.equal(mgr.play(room, host.id, "yellow-3").ok, true);
+    assert.equal(g.phase, PHASE.TRICK_RESULT);
+    assert.equal(g.lastWinnerIndex, 1);
+    const before = mgr.viewFor(room, host.id);
+    assert.equal(before.showTrickExplanation, false);
+    assert.equal((before.trick || []).length, 2);
+    assert.equal(before.trick.find((p) => p.playerIndex === 1).card.rank, 12);
+    const skipped = mgr.continueRound(room, host.id);
+    assert.equal(skipped.ok, true);
+    assert.equal(skipped.waiting, true);
+    assert.equal(room.game.phase, PHASE.TRICK_RESULT);
+    room.trickExplanationShown = true;
+    const shown = mgr.viewFor(room, host.id);
+    assert.equal(shown.showTrickExplanation, true);
+    const advanced = mgr.continueRound(room, host.id);
+    assert.equal(advanced.ok, true);
+    assert.notEqual(room.game.phase, PHASE.TRICK_RESULT);
+  } finally {
+    mgr._clearTimer(room);
+  }
 });
