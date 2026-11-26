@@ -108,8 +108,8 @@ test("two browsers can open a room, bid together, and play a legal trick", async
   host.send({ type: "startGame" });
   await hostBidPhase;
   await guestBidPhase;
-  assert.equal(host.latest.myHand.length, 1);
-  assert.equal(guest.latest.myHand.length, 1);
+  assert.equal(host.latest.myHand.length, 6);
+  assert.equal(guest.latest.myHand.length, 6);
   assert.notEqual(host.latest.myHand[0].id, guest.latest.myHand[0].id);
 
   const errP = guest.wait((m) => m.type === "error");
@@ -146,5 +146,8 @@ test("two browsers can open a room, bid together, and play a legal trick", async
   await afterFollowH;
   await afterFollowG;
   assert.ok(["trickResult", "roundResult"].includes(host.latest.phase));
-  assert.ok(host.latest.statusMessage.includes("贏咗呢墩") || host.latest.phase === "roundResult");
+  assert.ok(
+    /贏咗呢個回合|作廢|食咗呢個回合/.test(host.latest.statusMessage || "")
+    || host.latest.phase === "roundResult",
+  );
 });

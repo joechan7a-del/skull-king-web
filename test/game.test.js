@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { Game, PHASE } from "../server/game.js";
 import { scoreRound, winnerIndex, playedCard, makeSuit, makeSpecial } from "../server/rules.js";
 import { RoomManager, playHasFlourish, trickReviewDelayMs, TRICK_REVIEW_MS, FLOURISH_HOLD_MS, TRICK_PAUSE_MS } from "../server/rooms.js";
+import { AI_NAMES, pickAINames } from "../server/ai.js";
 
 function seats(nHumans = 2, nAI = 2) {
   const s = [];
@@ -12,12 +13,13 @@ function seats(nHumans = 2, nAI = 2) {
   return s;
 }
 
-test("deal n cards in round n and start in bidding", () => {
+test("round 1 deals 6 cards and starts in bidding", () => {
   const g = new Game(seats(1, 2));
   g.start();
   assert.equal(g.round, 1);
+  assert.equal(g.cardsDealt, 6);
   assert.equal(g.phase, PHASE.BIDDING);
-  for (const p of g.players) assert.equal(p.hand.length, 1);
+  for (const p of g.players) assert.equal(p.hand.length, 6);
 });
 
 test("bids stay hidden until everyone has bid, then reveal together", () => {
@@ -44,9 +46,9 @@ test("bids stay hidden until everyone has bid, then reveal together", () => {
 test("illegal bid and illegal play are rejected; other hands stay private", () => {
   const g = new Game(seats(2, 0));
   g.start();
-  assert.ok(g.submitBid("h0", 99).error || g.players[0].bid === 1); // clamped? we reject non-integers and out-of-range if Number(value) !== bid after clamp only if value isn't integer in range
+  assert.ok(g.submitBid("h0", 99).error || g.players[0].bid === 6); // clamped? we reject non-integers and out-of-range if Number(value) !== bid after clamp only if value isn't integer in range
   // Our implementation clamps with min/max only if Number(value) equals the clamped integer.
-  // 99 -> bid becomes 1, Number(99) !== 1, so error. Good.
+  // 99 -> bid becomes 6, Number(99) !== 6, so error. Good.
   assert.ok(g.submitBid("h0", 99).error);
   g.submitBid("h0", 0);
   g.submitBid("h1", 0);
@@ -139,16 +141,17 @@ test("round scoring awards bonus only if the bid is made", () => {
   assert.equal(rows[0].bidPoints, 20);
   assert.equal(rows[0].bonus, 40);
   assert.equal(rows[0].roundTotal, 60);
-  assert.equal(rows[1].bidPoints, 10);
+  assert.equal(rows[1].bidPoints, 60); // 0-bid made: 10 * 6 cards dealt
   assert.equal(rows[1].bonus, 10);
-  assert.equal(rows[1].runningTotal, 20);
+  assert.equal(rows[1].runningTotal, 70);
 });
 
-test("ten rounds then game over; play again resets", () => {
+test("five rounds then game over; play again resets", () => {
   const g = new Game(seats(2, 0));
   g.start();
-  for (let r = 1; r <= 10; r++) {
+  for (let r = 1; r <= 5; r++) {
     assert.equal(g.round, r);
+    assert.equal(g.cardsDealt, r + 5);
     for (const p of g.players) {
       p.bid = 0;
       p.tricksWon = 0;
@@ -171,25 +174,37 @@ test("ten rounds then game over; play again resets", () => {
 test("AI fills seats and can bid + play a whole round", () => {
   const g = new Game(seats(1, 2));
   g.start();
+  assert.equal(g.cardsDealt, 6);
   assert.ok(g.players[1].isAI && g.players[1].bid != null);
   assert.ok(g.players[2].isAI && g.players[2].bid != null);
   g.submitBid("h0", 0);
   assert.equal(g.phase, PHASE.PLAYING);
   let guard = 0;
-  while (g.phase === PHASE.PLAYING && guard++ < 20) {
+  while (g.phase !== PHASE.ROUND_RESULT && guard++ < 200) {
+    if (g.phase === PHASE.TRICK_RESULT) {
+      g.advanceTrickResult();
+      continue;
+    }
+    if (g.phase === PHASE.CHOOSING_TIGRESS) {
+      const cur = g.players[g.currentPlayerIndex];
+      const r = g.resolveTigress(cur.id, false);
+      assert.equal(r.ok, true);
+      continue;
+    }
     const cur = g.players[g.currentPlayerIndex];
     if (cur.isAI) {
       const r = g.stepAI();
-      assert.equal(r.ok, true);
+      assert.equal(r.ok, true, r.error);
     } else {
-      const r = g.playCard(cur.id, cur.hand[0].id, cur.hand[0].special === "tigress" ? false : null);
-      assert.equal(r.ok, true);
+      const view = g.viewFor(cur.id);
+      const card = (view.myHand || []).find((c) => (view.legalCardIds || []).includes(c.id)) || cur.hand[0];
+      const r = g.playCard(cur.id, card.id, card.special === "tigress" ? false : null);
+      assert.equal(r.ok, true, r.error);
     }
   }
-  assert.equal(g.phase, PHASE.TRICK_RESULT);
-  g.advanceTrickResult();
   assert.equal(g.phase, PHASE.ROUND_RESULT);
   assert.equal(g.scores.length, 1);
+  assert.equal(g.scores[0].cardsDealt, 6);
 });
 
 test("createRoom defaults to 5 players and the host can still pick 2–6", () => {
@@ -218,26 +233,30 @@ test("room: two humans join, host starts 2+2 AI, reconnect mid-hand", () => {
   assert.equal(started.ok, true);
   assert.equal(room.game.players.length, 4);
   assert.equal(room.game.players.filter((p) => p.isAI).length, 2);
-  assert.deepEqual(
-    room.game.players.filter((p) => p.isAI).map((p) => p.name),
-    ["安妮", "黑鬍子"],
-  );
+  const aiNames = room.game.players.filter((p) => p.isAI).map((p) => p.name);
+  assert.equal(aiNames.length, 2);
+  assert.equal(new Set(aiNames).size, 2);
+  for (const n of aiNames) {
+    assert.ok(AI_NAMES.includes(n), n);
+    assert.ok(!["阿明", "小芳"].includes(n));
+  }
+  assert.deepEqual(room.game.players.map((p) => p.colorIndex), [0, 1, 2, 3]);
 
   const token = joined.player.token;
   const again = mgr.reconnect(token);
   assert.equal(again.player.id, joined.player.id);
   assert.equal(again.room.code, room.code);
   const view = mgr.viewFor(room, joined.player.id);
-  assert.equal(view.myHand.length, 1);
+  assert.equal(view.myHand.length, 6);
   assert.equal(view.phase, "bidding");
   // Host cannot see the other hand
   const hostView = mgr.viewFor(room, host.id);
   assert.ok(hostView.players.every((p) => !p.hand));
-  assert.equal(hostView.myHand.length, 1);
+  assert.equal(hostView.myHand.length, 6);
   assert.ok(hostView.myHand[0].id !== view.myHand[0].id || hostView.myHand[0].id === view.myHand[0].id);
   // just ensure they're independent arrays
   const other = hostView.players.find((p) => p.id === joined.player.id);
-  assert.equal(other.handCount, 1);
+  assert.equal(other.handCount, 6);
   assert.equal(other.bid, null);
   assert.equal(other.hasBid, false);
 
@@ -293,8 +312,8 @@ test("八爪魚 destroys a trick: no capture, next leader is the hypothetical wi
   const rows = g.scores[0].rows;
   assert.equal(rows[0].taken, 0);
   assert.equal(rows[1].taken, 1);
-  assert.equal(rows[0].taken + rows[1].taken, 1); // less than 2 cards dealt
-  assert.equal(rows[0].bidPoints, 20); // 0-bid made: 10 * 2 cards dealt
+  assert.equal(rows[0].taken + rows[1].taken, 1); // less than 7 cards dealt
+  assert.equal(rows[0].bidPoints, 70); // 0-bid made: 10 * 7 cards dealt
   assert.equal(rows[1].bidPoints, 20);
 });
 
@@ -323,7 +342,7 @@ test("destroyed last trick of a round ends the round with no winner for that tri
   const rows = g.scores[0].rows;
   assert.equal(rows[0].taken, 0);
   assert.equal(rows[1].taken, 1);
-  assert.equal(rows[0].bidPoints, 20);
+  assert.equal(rows[0].bidPoints, 70); // 0-bid made: 10 * 7 cards dealt
   assert.equal(rows[1].bidPoints, 20);
 });
 
@@ -362,7 +381,7 @@ test("0-bid scoring uses cards dealt even when a trick was destroyed", () => {
   g.players[0].bid = 0;
   g.players[1].bid = 1;
   g.players[0].tricksWon = 0;
-  g.players[1].tricksWon = 1; // 2 of 3 tricks were destroyed
+  g.players[1].tricksWon = 1; // only 1 trick taken; the rest of the 8 were destroyed
   g.players[0].potentialBonus = 0;
   g.players[1].potentialBonus = 0;
   g.phase = PHASE.TRICK_RESULT;
@@ -371,7 +390,7 @@ test("0-bid scoring uses cards dealt even when a trick was destroyed", () => {
   g.lastNextLeaderIndex = 0;
   g.advanceTrickResult();
   const rows = g.scores[0].rows;
-  assert.equal(rows[0].bidPoints, 30); // 0 bid made, 10 * 3
+  assert.equal(rows[0].bidPoints, 80); // 0 bid made, 10 * 8 cards dealt
   assert.equal(rows[1].bidPoints, 20);
   assert.equal(rows[0].taken + rows[1].taken, 1);
 });
@@ -522,7 +541,7 @@ test("trickNumber counts completed and current tricks including voided ones", ()
   g.currentPlayerIndex = 1;
   let view = g.viewFor("h0");
   assert.equal(view.trickNumber, 1);
-  assert.equal(view.tricksTotal, 2);
+  assert.equal(view.tricksTotal, 7);
   assert.equal(g.tricksPlayed, 0);
   g.playCard("h1", "yellow-12");
   g.playCard("h0", "yellow-3");
@@ -540,7 +559,7 @@ test("trickNumber counts completed and current tricks including voided ones", ()
   assert.equal(g.phase, PHASE.TRICK_RESULT);
   assert.equal(view.lastTrickDestroyed, true);
   assert.equal(view.trickNumber, 2);
-  assert.equal(view.tricksTotal, 2);
+  assert.equal(view.tricksTotal, 7);
   g.advanceTrickResult();
   view = g.viewFor("h0");
   assert.equal(view.phase, PHASE.ROUND_RESULT);
@@ -705,4 +724,65 @@ test("the winner overlay waits to look at the completed trick, and the winning c
   } finally {
     mgr._clearTimer(room);
   }
+});
+
+test("pickAINames draws unique names and skips reserved human names", () => {
+  const names = pickAINames(6, ["安妮", "杰克"], () => 0);
+  assert.equal(names.length, 6);
+  assert.equal(new Set(names).size, 6);
+  assert.ok(!names.includes("安妮"));
+  assert.ok(!names.includes("杰克"));
+  for (const n of names) assert.ok(AI_NAMES.includes(n) || /^電腦\d+$/.test(n));
+});
+
+test("startGame and playAgain shuffle AI names but keep seat colors for the match", () => {
+  const seq = [0.91, 0.12, 0.83, 0.24, 0.75, 0.36, 0.67, 0.48, 0.19, 0.58, 0.07, 0.64, 0.33, 0.81, 0.44, 0.22];
+  let i = 0;
+  const rng = () => seq[i++ % seq.length];
+  const mgr = new RoomManager({ rng });
+  const { room, player: host } = mgr.createRoom({ name: "阿明" });
+  mgr.setSeats(room, host.id, 3);
+  mgr.setAiFill(room, host.id, true);
+  assert.equal(mgr.startGame(room, host.id).ok, true);
+  const first = room.game.players.filter((p) => p.isAI).map((p) => ({ id: p.id, name: p.name, colorIndex: p.colorIndex }));
+  assert.equal(first.length, 2);
+  assert.equal(new Set(first.map((p) => p.name)).size, 2);
+  for (const p of first) assert.ok(AI_NAMES.includes(p.name));
+  assert.deepEqual(room.game.players.map((p) => p.colorIndex), [0, 1, 2]);
+  const midNames = room.game.players.filter((p) => p.isAI).map((p) => p.name);
+  for (const p of room.game.players) {
+    p.bid = 0;
+    p.tricksWon = 0;
+    p.potentialBonus = 0;
+    p.hand = [];
+  }
+  room.game.phase = "trickResult";
+  room.game.lastWinnerIndex = 0;
+  room.game.advanceTrickResult();
+  room.game.continueAfterRound();
+  assert.equal(room.game.round, 2);
+  assert.deepEqual(room.game.players.filter((p) => p.isAI).map((p) => p.name), midNames);
+  assert.deepEqual(room.game.players.map((p) => p.colorIndex), [0, 1, 2]);
+  // Finish the remaining rounds so we can rematch.
+  while (room.game.phase !== "gameOver") {
+    for (const p of room.game.players) {
+      p.bid = 0;
+      p.tricksWon = 0;
+      p.potentialBonus = 0;
+      p.hand = [];
+    }
+    room.game.phase = "trickResult";
+    room.game.lastWinnerIndex = 0;
+    room.game.advanceTrickResult();
+    room.game.continueAfterRound();
+  }
+  const ids = room.game.players.map((p) => p.id);
+  assert.equal(mgr.playAgain(room, host.id).ok, true);
+  const again = room.game.players.filter((p) => p.isAI);
+  assert.equal(again.length, 2);
+  assert.deepEqual(room.game.players.map((p) => p.id), ids);
+  assert.deepEqual(room.game.players.map((p) => p.colorIndex), [0, 1, 2]);
+  for (const p of again) assert.ok(AI_NAMES.includes(p.name));
+  // Names are redrawn for the new match; a different shuffle should not stick to the first pair forever.
+  assert.equal(new Set(again.map((p) => p.name)).size, 2);
 });

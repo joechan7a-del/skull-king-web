@@ -23,12 +23,19 @@ export const PHASE = {
   GAME_OVER: "gameOver",
 };
 
+/** A match has five rounds. Round n deals n + 5 cards (6 through 10). */
+export const TOTAL_ROUNDS = 5;
+export function cardsDealtForRound(round) {
+  return round + 5;
+}
+
 export class Game {
   constructor(seats) {
-    this.players = seats.map((s) => ({
+    this.players = seats.map((s, i) => ({
       id: s.id,
       name: s.name,
       isAI: !!s.isAI,
+      colorIndex: i,
       hand: [],
       bid: null,
       tricksWon: 0,
@@ -56,7 +63,7 @@ export class Game {
   }
 
   get cardsDealt() {
-    return this.round;
+    return cardsDealtForRound(this.round);
   }
 
   get bidsRevealed() {
@@ -90,7 +97,7 @@ export class Game {
     this.pendingTigress = null;
     this.tricksPlayed = 0;
     this.phase = PHASE.BIDDING;
-    this.statusMessage = `第 ${this.round} 局，各有 ${n} 張牌。睇完手牌再叫你估會贏幾墩。`;
+    this.statusMessage = `第 ${this.round} 局，各有 ${n} 張牌。睇完手牌再預測會贏幾多回合。`;
     this._applyAIBids();
     this.revision++;
   }
@@ -115,14 +122,14 @@ export class Game {
     this.phase = PHASE.PLAYING;
     const leader = this.players[this.currentPlayerIndex];
     this.statusMessage = leader.isAI
-      ? `由${leader.name}先出第一墩。`
+      ? `由${leader.name}先出第一回合。`
       : this._isSelfLeadMessage(leader);
     this.revision++;
     return true;
   }
 
   _isSelfLeadMessage(leader) {
-    return `由${leader.name}先出第一墩。`;
+    return `由${leader.name}先出第一回合。`;
   }
 
   submitBid(playerId, value) {
@@ -226,10 +233,10 @@ export class Game {
     const leader = this.players[result.nextLeaderIndex];
 
     if (result.destroyed) {
-      const beast = result.effect === "whiteWhale" ? "白鯨令呢墩作廢" : "八爪魚食咗呢墩";
+      const beast = result.effect === "whiteWhale" ? "白鯨令呢個回合作廢" : "八爪魚食咗呢個回合";
       this.statusMessage = lastOfRound
-        ? `${beast}，無人贏墩。呢局完。`
-        : `${beast}，無人贏墩。下一墩由${leader.name}先出。`;
+        ? `${beast}，無人贏呢個回合。呢局完。`
+        : `${beast}，無人贏呢個回合。下一回合由${leader.name}先出。`;
     } else {
       const bonus = bonusPoints(this.trick, result.winnerPlayerIndex);
       const winner = this.players[result.winnerPlayerIndex];
@@ -239,7 +246,7 @@ export class Game {
       this.lastTrickDetails = bonus.details;
       const extra = bonus.details.length ? "（" + bonus.details.join("，") + "）" : "";
       const whale = result.effect === "whiteWhale" ? "白鯨令最高數字贏，" : "";
-      this.statusMessage = `${whale}${winner.name}贏咗呢墩。` + extra;
+      this.statusMessage = `${whale}${winner.name}贏咗呢個回合。` + extra;
     }
     this.roundTrickLog = this.roundTrickLog || [];
     this.roundTrickLog.push({
@@ -278,7 +285,7 @@ export class Game {
   }
 
   advanceTrickResult() {
-    if (this.phase !== PHASE.TRICK_RESULT) return { error: "而家唔係墩結果。" };
+    if (this.phase !== PHASE.TRICK_RESULT) return { error: "而家唔係回合結果。" };
     this.previousTrick = this._snapshotPreviousTrick();
     const leader = this.lastNextLeaderIndex ?? this.lastWinnerIndex ?? this.currentPlayerIndex;
     if (this.players.every((p) => p.hand.length === 0)) {
@@ -286,7 +293,7 @@ export class Game {
     } else {
       this.currentPlayerIndex = leader;
       this.phase = PHASE.PLAYING;
-      this.statusMessage = `${this.players[leader].name}出下一墩。`;
+      this.statusMessage = `${this.players[leader].name}出下一回合。`;
       this.revision++;
     }
     return { ok: true };
@@ -321,7 +328,7 @@ export class Game {
 
   continueAfterRound() {
     if (this.phase !== PHASE.ROUND_RESULT) return { error: "而家唔係局結算。" };
-    if (this.round >= 10) {
+    if (this.round >= TOTAL_ROUNDS) {
       this.phase = PHASE.GAME_OVER;
       const top = Math.max(...this.players.map((p) => p.score));
       const tied = this.players.filter((p) => p.score === top);
@@ -372,7 +379,7 @@ export class Game {
     const myIndex = this.playerIndexById(playerId);
     const current = this.players[this.currentPlayerIndex];
     if (this.phase === PHASE.BIDDING) {
-      return "睇完手牌，叫你估呢局會贏幾墩。其他人嘅叫牌要等齊先睇到。";
+      return "睇完手牌，預測呢局會贏幾多回合。其他人嘅叫牌要等齊先睇到。";
     }
     if (this.phase === PHASE.CHOOSING_TIGRESS) {
       return this.pendingTigress && this.pendingTigress.playerId === playerId
@@ -383,7 +390,7 @@ export class Game {
     const trick = this.phase === PHASE.TRICK_RESULT ? this.lastTrick : this.trick;
     if (!trick.length) {
       if (myIndex === this.currentPlayerIndex) {
-        return "由你先出呢一墩。第一張有花色嘅牌會定花；如果特殊牌先出，呢墩就冇得跟花。";
+        return "由你先出呢一回合。第一張有花色嘅牌會定花；如果特殊牌先出，呢個回合就冇得跟花。";
       }
       return `等${current?.name || "對手"}先出。第一張有花色嘅牌會定花。`;
     }
@@ -392,7 +399,7 @@ export class Game {
       const info = SUIT_INFO[suit];
       return `而家要跟${info.shortName}色（${info.chineseName}）。你有呢種花就要跟；特殊牌隨時可出。`;
     }
-    return "呢墩由特殊牌先出，冇得跟花，可以出任何牌。";
+    return "呢個回合由特殊牌先出，冇得跟花，可以出任何牌。";
   }
 
   viewFor(playerId) {
@@ -435,6 +442,7 @@ export class Game {
       phase: this.phase,
       round: this.round,
       cardsDealt: this.cardsDealt,
+      roundsTotal: TOTAL_ROUNDS,
       trickNumber,
       tricksTotal: this.cardsDealt,
       dealerIndex: this.dealerIndex,
@@ -481,6 +489,7 @@ export class Game {
           i === this.currentPlayerIndex,
         potentialBonus: p.id === playerId ? p.potentialBonus : null,
         bonusDetails: p.id === playerId ? p.bonusDetails : [],
+        colorIndex: p.colorIndex ?? i,
       })),
     };
   }

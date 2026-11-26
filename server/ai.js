@@ -1,6 +1,49 @@
 import { playedCard, resolveTrick } from "./rules.js";
 
-export const AI_NAMES = ["安妮", "黑鬍子", "凱利", "摩根", "杰克"];
+export const AI_NAMES = [
+  "安妮",
+  "黑鬍子",
+  "凱利",
+  "摩根",
+  "杰克",
+  "紅鬍子",
+  "獨眼龍",
+  "海魔女",
+  "大副強",
+  "花船長",
+  "銀鈎",
+  "珍珠",
+  "炮手輝",
+  "藍鬚",
+  "白浪",
+  "珊瑚",
+  "金牙",
+  "鹽婆",
+  "錨仔",
+  "霧隱",
+  "潮生",
+  "裂帆",
+  "羅盤",
+  "燈塔守",
+];
+
+/** Shuffle a fresh, unique set of display names for one match. */
+export function pickAINames(count, reserved = [], rng = Math.random) {
+  const need = Math.max(0, Number(count) || 0);
+  const taken = new Set((reserved || []).filter(Boolean));
+  const bag = AI_NAMES.filter((n) => !taken.has(n));
+  for (let i = bag.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [bag[i], bag[j]] = [bag[j], bag[i]];
+  }
+  const picked = bag.slice(0, need);
+  let n = 1;
+  while (picked.length < need) {
+    const fallback = `電腦${n++}`;
+    if (!taken.has(fallback) && !picked.includes(fallback)) picked.push(fallback);
+  }
+  return picked;
+}
 
 export function bid(hand, cardsDealt, rng = Math.random) {
   let expected = 0;

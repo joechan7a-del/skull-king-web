@@ -408,7 +408,7 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   flex-shrink: 0;
 }
 .avatar.gold { background: var(--gold); color: var(--ink); }
-.avatar.ai { background: #2a3c58; color: var(--gold-soft); }
+.avatar.ai:not(.tone) { background: #2a3c58; color: var(--gold-soft); }
 .player-row .meta { flex: 1; min-width: 0; }
 .player-row .name { font-weight: 700; }
 .player-row .sub { font-size: 12px; color: var(--white-70); }
@@ -2171,6 +2171,24 @@ button, a, .btn, .btn-text, .sk-play, .sk-wrap, .seat-card, .code, input, .bid-g
   border-color: #fff3c0;
 }
 
+/* Gentle border pulse: only while you still need to bid (CSS size unchanged). */
+@keyframes bid-need-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 1px rgba(237, 191, 89, 0.28);
+    border-color: rgba(237, 191, 89, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 2px rgba(237, 191, 89, 0.72);
+    border-color: rgba(255, 236, 170, 0.95);
+  }
+}
+.bid-grid.bid-need-pick button {
+  animation: bid-need-pulse 1.7s ease-in-out infinite;
+}
+.btn.bid-need-confirm {
+  animation: bid-need-pulse 1.7s ease-in-out infinite;
+}
+
 .round-rail {
   display: flex;
   gap: 3px;
@@ -2197,6 +2215,12 @@ button, a, .btn, .btn-text, .sk-play, .sk-wrap, .seat-card, .code, input, .bid-g
 @media (prefers-reduced-motion: reduce) {
   .flourish-banner, .seat-bidline.bid-reveal, .score-floater { animation: none; }
   .bid-grid button.on { transform: none; }
+  .bid-grid.bid-need-pick button,
+  .btn.bid-need-confirm {
+    animation: none;
+    box-shadow: 0 0 0 2px rgba(237, 191, 89, 0.6);
+    border-color: rgba(237, 191, 89, 0.85);
+  }
 }
 
 
@@ -2396,8 +2420,10 @@ button, a, .btn, .btn-text, .sk-play, .sk-wrap, .seat-card, .code, input, .bid-g
   color: var(--av-fg, #fff);
 }
 .avatar.tone.gold {
-  background: var(--gold);
-  color: var(--ink);
+  /* Thinking highlight is a ring only; the seat color stays put. */
+  background: var(--av-bg, var(--white-14));
+  color: var(--av-fg, #fff);
+  box-shadow: 0 0 0 2px var(--gold), 0 0 10px rgba(237, 191, 89, 0.7);
 }
 .seat.is-me .avatar {
   box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--gold);

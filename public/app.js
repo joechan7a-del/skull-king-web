@@ -373,15 +373,21 @@ function scoreFloaterHTML(v, playerId, visualIndex) {
   return `<div class="score-floater ${cls}" style="--float-base:${delay}ms">${escapeHtml(label)}</div>`;
 }
 
+function totalRounds(v) {
+  const n = Number(v && v.roundsTotal);
+  return Number.isFinite(n) && n > 0 ? n : 5;
+}
+
 function roundRailHTML(v) {
   if (!v || !v.round) return "";
-  const cur = Math.min(10, Math.max(1, v.round));
-  const segs = Array.from({ length: 10 }, (_, i) => {
+  const total = totalRounds(v);
+  const cur = Math.min(total, Math.max(1, v.round));
+  const segs = Array.from({ length: total }, (_, i) => {
     const n = i + 1;
     const cls = n < cur ? "done" : n === cur ? "current" : "future";
     return `<span class="round-seg ${cls}"></span>`;
   }).join("");
-  return `<div class="round-rail" aria-label="進度：第 ${cur}／10 局">${segs}</div>`;
+  return `<div class="round-rail" aria-label="進度：第 ${cur}／${total} 局">${segs}</div>`;
 }
 
 function maybeAutoJoin(code) {
@@ -928,7 +934,7 @@ function lastTrickCueHTML(v) {
   if (v.phase !== "playing" && v.phase !== "choosingTigress") return "";
   const total = v.tricksTotal || v.cardsDealt;
   if (!total || v.trickNumber !== total) return "";
-  return `<div class="last-trick-cue" role="status">最後一墩</div>`;
+  return `<div class="last-trick-cue" role="status">最後一回合</div>`;
 }
 
 function seatRadii(n) {
@@ -964,12 +970,12 @@ function followSuitHintHTML(v) {
   const suit = ledSuitActive(v);
   if (!suit) return "";
   const labels = {
-    black: "呢墩要跟黑色（骷髏旗）",
-    yellow: "呢墩要跟黃色",
-    green: "呢墩要跟綠色（鸚鵡）",
-    purple: "呢墩要跟紫色",
+    black: "呢個回合要跟黑色（骷髏旗）",
+    yellow: "呢個回合要跟黃色",
+    green: "呢個回合要跟綠色（鸚鵡）",
+    purple: "呢個回合要跟紫色",
   };
-  const text = labels[suit] || `呢墩要跟${suitLabel(suit)}`;
+  const text = labels[suit] || `呢個回合要跟${suitLabel(suit)}`;
   return `<div class="follow-suit-hint suit-${suit}" role="status">${suitPip(suit)}<span>${escapeHtml(text)}</span></div>`;
 }
 
@@ -978,7 +984,7 @@ function midTrickCueHTML(v) {
   const mid = (v.phase === "playing" || v.phase === "choosingTigress") && (v.trick || []).length;
   if (!mid) return "";
   const lead = v.currentTrickLead;
-  if (lead?.destroyed) return `<div class="table-status-chip void-soon" role="status">呢墩快將作廢</div>`;
+  if (lead?.destroyed) return `<div class="table-status-chip void-soon" role="status">呢個回合快將作廢</div>`;
   if (lead && lead.leading === false) return `<div class="table-status-chip dim" role="status">尚未有人領先</div>`;
   if (lead && (lead.playerName || lead.cardLabel)) {
     const who = escapeHtml(lead.playerName || "");
@@ -1083,11 +1089,12 @@ const AVATAR_PALETTE = [
   ["#1f8b6b", "#e6faf3"],
 ];
 
-function avatarStyle(id) {
-  const s = String(id || "");
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
-  const pair = AVATAR_PALETTE[Math.abs(h) % AVATAR_PALETTE.length];
+function avatarStyle(colorIndex) {
+  const n = AVATAR_PALETTE.length;
+  let i = Number(colorIndex);
+  if (!Number.isFinite(i)) i = 0;
+  i = ((i % n) + n) % n;
+  const pair = AVATAR_PALETTE[i];
   return `--av-bg:${pair[0]};--av-fg:${pair[1]}`;
 }
 
@@ -1114,9 +1121,9 @@ function bidTotalChipHTML(v) {
   const diff = sum - total;
   let tone = "exact";
   let cue = "剛好";
-  if (diff > 0) { tone = "over"; cue = `多 ${diff} 墩`; }
-  else if (diff < 0) { tone = "under"; cue = `少 ${-diff} 墩`; }
-  return `<div class="bid-total-chip ${tone}" role="status">合共叫 ${sum}／${total} 墩 · ${cue}</div>`;
+  if (diff > 0) { tone = "over"; cue = `多 ${diff} 回合`; }
+  else if (diff < 0) { tone = "under"; cue = `少 ${-diff} 回合`; }
+  return `<div class="bid-total-chip ${tone}" role="status">合共叫 ${sum}／${total} 回合 · ${cue}</div>`;
 }
 
 function maybeWinBuzz(v) {
@@ -1134,7 +1141,7 @@ function trickLogButtonHTML(v) {
   const log = v?.roundTrickLog || [];
   if (!log.length) return "";
   if (v.phase === "roundResult" || v.phase === "gameOver") return "";
-  const label = log.length === 1 ? "呢局 1 墩" : `呢局各墩（${log.length}）`;
+  const label = log.length === 1 ? "呢局 1 回合" : `呢局各回合（${log.length}）`;
   return `<button type="button" class="btn btn-ghost prev-trick-btn" data-act="trick-log">${label}</button>`;
 }
 
@@ -1144,7 +1151,7 @@ function trickLogSheetHTML(v) {
   if (!log.length) return "";
   const blocks = log.map((t) => {
     const winnerName = (t.cards || []).find((c) => c.playerIndex === t.winnerIndex)?.playerName || "有人";
-    const winner = t.destroyed ? "呢墩作廢" : `${winnerName}贏咗`;
+    const winner = t.destroyed ? "呢個回合作廢" : `${winnerName}贏咗`;
     const plays = (t.cards || []).map((played) => {
       const mine = v.players?.[played.playerIndex]?.id === v.yourId;
       const won = !t.destroyed && played.playerIndex === t.winnerIndex;
@@ -1154,7 +1161,7 @@ function trickLogSheetHTML(v) {
       </div>`;
     }).join("");
     return `<section class="trick-log-item">
-      <h3>第 ${t.trickNumber} 墩 · ${escapeHtml(winner)}</h3>
+      <h3>第 ${t.trickNumber} 回合 · ${escapeHtml(winner)}</h3>
       <p>${escapeHtml(t.explanation || "")}</p>
       <div class="prev-plays">${plays}</div>
     </section>`;
@@ -1162,7 +1169,7 @@ function trickLogSheetHTML(v) {
   return `<div class="overlay center" data-act="close-trick-log">
     <div class="sheet inspect-sheet" data-stop="1" data-sheet-dismiss="close-trick-log">
       ${sheetHandleHTML()}
-      <h2>呢局打過嘅墩</h2>
+      <h2>呢局打過嘅回合</h2>
       <div class="trick-log-list">${blocks}</div>
       <button class="btn btn-sheet" data-act="close-trick-log">返去牌桌</button>
     </div>
@@ -1724,7 +1731,7 @@ app.addEventListener("click", (e) => {
   else if (act === "bid-edit-cancel") { state.editingBid = false; render(); return; }
   else if (act === "bid-pick") { state.bidValue = Number(t.dataset.n); haptic(10); render(); }
   else if (act === "bid-submit") {
-    if (state.bidValue == null) { setError("請先揀你叫幾多墩。"); return; }
+    if (state.bidValue == null) { setError("請先揀你叫幾多回合。"); return; }
     haptic(16);
     state.editingBid = false;
     send({ type: "bid", value: state.bidValue });
@@ -1872,7 +1879,7 @@ function openInspect(cardId, why) {
 function cardPlayWhy(card, v) {
   if (!v || !card) return "";
   if (v.phase === "bidding") return "要先叫牌，叫完先輪到出牌。";
-  if (v.phase === "trickResult") return "等呢墩結果完咗，先出下一張。";
+  if (v.phase === "trickResult") return "等呢個回合結果完咗，先出下一張。";
   if (v.phase === "choosingTigress") return "請先揀母老虎當海盜定逃脫。";
   if (v.phase !== "playing") return "";
   const legal = new Set(v.legalCardIds || []);
@@ -1888,9 +1895,9 @@ function cardPlayWhy(card, v) {
 }
 
 function bidHint(cardsDealt, value) {
-  if (value == null) return "睇完手牌先叫。叫 0 即係估一墩都唔贏。";
-  if (value === 0) return `叫 0：估一墩都唔贏。估中加 ${10 * cardsDealt} 分，一旦贏咗墩就要扣 ${10 * cardsDealt} 分。`;
-  return `叫 ${value} 墩：估中加 ${20 * value} 分；估錯就差幾墩，每差 1 墩扣 10 分。`;
+  if (value == null) return "睇完手牌先叫。叫 0 即係預測一個回合都唔贏。";
+  if (value === 0) return `叫 0：預測一個回合都唔贏。估中加 ${10 * cardsDealt} 分，一旦贏咗回合就要扣 ${10 * cardsDealt} 分。`;
+  return `叫 ${value} 回合：估中加 ${20 * value} 分；估錯就差幾回合，每差 1 回合扣 10 分。`;
 }
 
 function inspectHTML() {
@@ -1965,7 +1972,7 @@ function renderHome() {
       </div>
       <div class="home-foot">
         <button class="btn-text" data-act="rules">遊戲規則</button>
-        <div class="footer-note">基本規則 · 八爪魚同白鯨 · 10 局 · 暫時唔包括贓物牌</div>
+        <div class="footer-note">基本規則 · 八爪魚同白鯨 · 5 局 · 暫時唔包括贓物牌</div>
         ${location.hostname === "localhost" || location.hostname === "127.0.0.1" ? lan : ""}
         ${a2hsHTML()}
       </div>
@@ -1985,25 +1992,25 @@ function renderLobby() {
   const canStart = host && othersReady && (v.aiFill ? v.seats >= 2 : humans.length >= 2);
 
   const rows = [
-    ...humans.map((h) => {
+    ...humans.map((h, i) => {
       const tags = [];
       if (h.isHost) tags.push(`<span class="pill host">房主</span>`);
       if (h.ready) tags.push(`<span class="pill">已準備</span>`);
       if (!h.connected) tags.push(`<span class="pill down">已斷線</span>`);
       const display = h.id === v.yourId ? (state.name || h.name) : h.name;
       return `<div class="player-row${h.id === v.yourId ? " me" : ""}">
-        <div class="avatar tone" style="${avatarStyle(h.id)}">${escapeHtml((display || "?").slice(0, 1))}</div>
+        <div class="avatar tone" style="${avatarStyle(h.colorIndex ?? i)}">${escapeHtml((display || "?").slice(0, 1))}</div>
         <div class="meta">
           <div class="name">${escapeHtml(display)}${h.id === v.yourId ? "（你）" : ""}</div>
         </div>
         ${tags.join("")}
       </div>`;
     }),
-    ...ai.map((a) => `<div class="player-row">
-      <div class="avatar ai tone" style="${avatarStyle(a.id || a.name)}">${escapeHtml(a.name.slice(0, 1))}</div>
+    ...ai.map((a, i) => `<div class="player-row">
+      <div class="avatar ai tone" style="${avatarStyle(a.colorIndex ?? (humans.length + i))}">${escapeHtml((a.name || "電").slice(0, 1))}</div>
       <div class="meta">
-        <div class="name">${escapeHtml(a.name)}</div>
-        <div class="sub">電腦對手 · 開始後入座</div>
+        <div class="name">${escapeHtml(a.name || "電腦補位")}</div>
+        <div class="sub">電腦對手 · 開始後隨機改名入座</div>
       </div>
       <span class="pill muted">電腦</span>
     </div>`),
@@ -2331,7 +2338,7 @@ function circleTableHTML(v) {
       ${scoreFloaterHTML(v, p.id, i)}
       <div class="seat-info">
         <div class="avatar-wrap">
-          <div class="avatar tone ${thinking ? "gold" : p.isAI ? "ai" : ""} ${win ? "win-ring" : ""}${bidLine.busted ? " bust-avatar" : ""}" style="${avatarStyle(p.id)}">${escapeHtml(p.name.slice(0, 1))}</div>
+          <div class="avatar tone ${thinking ? "gold" : p.isAI ? "ai" : ""} ${win ? "win-ring" : ""}${bidLine.busted ? " bust-avatar" : ""}" style="${avatarStyle(p.colorIndex ?? playerIndex)}">${escapeHtml(p.name.slice(0, 1))}</div>
           <span class="conn-dot ${connected ? "on" : "off"}" title="${connected ? (p.isAI ? "電腦" : "已連線") : "已斷線"}" aria-label="${connected ? (p.isAI ? "電腦" : "已連線") : "已斷線"}"></span>
         </div>
         <div class="seat-meta">
@@ -2350,9 +2357,9 @@ function circleTableHTML(v) {
   let center = "";
   const hasCards = (v.trick || []).length > 0;
   if (v.phase === "trickResult") center = "";
-  else if (destroyed) center = `<div class="table-center void">呢墩作廢，無人贏</div>`;
+  else if (destroyed) center = `<div class="table-center void">呢個回合作廢，無人贏</div>`;
   else if (!hasCards && bidding) center = `<div class="table-center dim">叫牌中</div>`;
-  else if (!hasCards) center = `<div class="table-center dim">呢墩尚未出牌</div>`;
+  else if (!hasCards) center = `<div class="table-center dim">呢個回合尚未出牌</div>`;
   else center = "";
 
   const led = ledSuitActive(v);
@@ -2384,11 +2391,11 @@ function trickResultOverlayHTML(v) {
   const meIndex = (v.players || []).findIndex((p) => p.id === v.yourId);
   const mine = !v.lastTrickDestroyed && meIndex >= 0 && meIndex === v.lastWinnerIndex;
   let title;
-  if (v.lastTrickDestroyed) title = "呢墩作廢";
-  else if (mine) title = "你贏咗呢墩";
+  if (v.lastTrickDestroyed) title = "呢個回合作廢";
+  else if (mine) title = "你贏咗呢個回合";
   else {
     const winner = (v.players || [])[v.lastWinnerIndex];
-    title = `${winner?.name || "有人"}贏咗呢墩`;
+    title = `${winner?.name || "有人"}贏咗呢個回合`;
   }
   const whyText = v.lastTrickExplanation || v.statusMessage || "";
   const why = whyText ? `<p class="trick-result-why">${escapeHtml(whyText)}</p>` : "";
@@ -2414,7 +2421,7 @@ function trickResultOverlayHTML(v) {
         ${why}
         ${details}
       </div>
-      <button type="button" class="btn btn-gold" data-act="continue">下一墩</button>
+      <button type="button" class="btn btn-gold" data-act="continue">下一回合</button>
     </div>
   </div>`;
 }
@@ -2426,8 +2433,8 @@ function myBidTrackHTML(v) {
   const busted = me.tricksWon > me.bid;
   let text;
   if (busted) text = `你已爆咗：叫 ${me.bid} 贏 ${me.tricksWon}`;
-  else if (me.tricksWon === me.bid) text = `你：叫 ${me.bid} 贏 ${me.tricksWon}，已經夠墩`;
-  else text = `你：叫 ${me.bid} 贏 ${me.tricksWon}，仲差 ${me.bid - me.tricksWon} 墩`;
+  else if (me.tricksWon === me.bid) text = `你：叫 ${me.bid} 贏 ${me.tricksWon}，已經夠回合`;
+  else text = `你：叫 ${me.bid} 贏 ${me.tricksWon}，仲差 ${me.bid - me.tricksWon} 回合`;
   return `<div class="my-bid-track${busted ? " busted" : ""}">${escapeHtml(text)}</div>`;
 }
 
@@ -2460,7 +2467,7 @@ function scorePeekHTML(v) {
 function prevTrickButtonHTML(v) {
   if (!v || v.phase === "roundResult" || v.phase === "gameOver") return "";
   const prev = (v.previousTrick && v.phase !== "trickResult")
-    ? `<button type="button" class="btn btn-ghost prev-trick-btn" data-act="prev-trick">上一墩</button>`
+    ? `<button type="button" class="btn btn-ghost prev-trick-btn" data-act="prev-trick">上一回合</button>`
     : "";
   const log = trickLogButtonHTML(v);
   if (!prev && !log) return "";
@@ -2474,8 +2481,8 @@ function prevTrickSheetHTML(v) {
   const winnerName = winner?.name || t.cards.find((c) => c.playerIndex === t.winnerIndex)?.playerName || "";
   let result;
   if (t.explanation) result = t.explanation;
-  else if (t.destroyed) result = "呢墩作廢，無人贏（八爪魚或白鯨）。";
-  else result = `${winnerName || "有人"}贏咗呢墩。`;
+  else if (t.destroyed) result = "呢個回合作廢，無人贏（八爪魚或白鯨）。";
+  else result = `${winnerName || "有人"}贏咗呢個回合。`;
   const plays = (t.cards || []).map((played) => {
     const mine = (v.players || [])[played.playerIndex]?.id === v.yourId;
     const name = escapeHtml(played.playerName || (v.players || [])[played.playerIndex]?.name || "");
@@ -2491,7 +2498,7 @@ function prevTrickSheetHTML(v) {
   return `<div class="overlay center" data-act="close-prev-trick">
     <div class="sheet inspect-sheet" data-stop="1" data-sheet-dismiss="close-prev-trick">
       ${sheetHandleHTML()}
-      <h2>上一墩</h2>
+      <h2>上一回合</h2>
       <p>${escapeHtml(result)}</p>
       ${details}
       <div class="prev-plays">${plays}</div>
@@ -2566,7 +2573,7 @@ function renderTable() {
     const btns = Array.from({ length: n + 1 }, (_, i) => {
       const on = state.bidValue === i ? "on" : "";
       const zero = i === 0 ? " bid-zero" : "";
-      const label = i === 0 ? `<span class="bid-n">0</span><span class="bid-cue">估唔贏</span>` : String(i);
+      const label = i === 0 ? `<span class="bid-n">0</span><span class="bid-cue">預測唔贏</span>` : String(i);
       return `<button type="button" class="${on}${zero}" data-act="bid-pick" data-n="${i}">${label}</button>`;
     }).join("");
     const bidCount = (v.players || []).filter((p) => p.hasBid).length;
@@ -2580,22 +2587,25 @@ function renderTable() {
       bidPanel = `<div class="bid-panel">
       <h3>已叫牌，等其他人</h3>
       ${progress}
-      <p>你叫咗 ${myBid} 墩。其他人叫咩要等齊先睇到。齊人揭曉之前你仍然可以改叫。</p>
+      <p>你叫咗 ${myBid} 回合。其他人叫咩要等齊先睇到。齊人揭曉之前你仍然可以改叫。</p>
       <button type="button" class="btn btn-sheet" data-act="bid-edit">改叫牌</button>
     </div>`;
     } else {
       const submitLabel = state.bidValue == null
-        ? "請先揀叫幾多墩"
-        : (alreadyBid ? `確定改叫 ${state.bidValue} 墩` : `確定叫 ${state.bidValue} 墩`);
+        ? "請先揀叫幾多回合"
+        : (alreadyBid ? `確定改叫 ${state.bidValue} 回合` : `確定叫 ${state.bidValue} 回合`);
+      const needFirstBid = !alreadyBid;
+      const pulsePick = needFirstBid && state.bidValue == null;
+      const pulseConfirm = needFirstBid && state.bidValue != null;
       bidPanel = `<div class="bid-panel">
-      <h3>${alreadyBid ? "改叫幾多墩？" : "你估會贏幾墩？"}</h3>
+      <h3>${alreadyBid ? "改叫幾多回合？" : "預測會贏幾多回合？"}</h3>
       ${progress}
-      <p>${alreadyBid ? `而家叫咗 ${myBid} 墩。改完仍然會等其他人一齊揭曉。` : `睇完手牌先叫，可以叫 0 到 ${n}。其他人叫咩要等齊先睇到。`}</p>
+      <p>${alreadyBid ? `而家叫咗 ${myBid} 回合。改完仍然會等其他人一齊揭曉。` : `睇完手牌先叫，可以叫 0 到 ${n}。其他人叫咩要等齊先睇到。`}</p>
       <p class="bid-hint">${escapeHtml(bidHint(n, state.bidValue))}</p>
-      <div class="bid-grid">${btns}</div>
+      <div class="bid-grid${pulsePick ? " bid-need-pick" : ""}">${btns}</div>
       <div class="confirm-actions">
         ${alreadyBid ? `<button type="button" class="btn btn-sheet" data-act="bid-edit-cancel">唔改</button>` : ""}
-        <button class="btn btn-gold" data-act="bid-submit" ${state.bidValue == null ? "disabled" : ""}>${submitLabel}</button>
+        <button class="btn btn-gold${pulseConfirm ? " bid-need-confirm" : ""}" data-act="bid-submit" ${state.bidValue == null ? "disabled" : ""}>${submitLabel}</button>
       </div>
     </div>`;
     }
@@ -2683,13 +2693,13 @@ function renderTable() {
           ${connChipHTML()}
         </div>
         <div class="center">
-          <div class="round">第 ${v.round} 局／10</div>
+          <div class="round">第 ${v.round} 局／${totalRounds(v)}</div>
           ${roundRailHTML(v)}
           <div class="sub">${(() => {
             const total = v.tricksTotal || v.cardsDealt;
             if (v.phase === 'bidding') return '各 ' + v.cardsDealt + ' 張 · 叫牌中';
             if (v.phase === 'roundResult' || v.phase === 'gameOver') return '各 ' + v.cardsDealt + ' 張 · 局滿';
-            return '第 ' + (v.trickNumber || 1) + '／' + total + ' 墩';
+            return '第 ' + (v.trickNumber || 1) + '／' + total + ' 回合';
           })()}</div>
         </div>
         <div class="header-actions">
@@ -2742,9 +2752,9 @@ function tigressHTML() {
       <p>母老虎係一張要「變身」嘅特殊牌：出嚟嗰陣你要即場宣布佢當海盜定逃脫。佢本身冇第三種打法，亦唔使跟花。</p>
       <div class="tig-choices">
         <button class="btn btn-gold" data-act="tig-pirate">當海盜出</button>
-        <p class="tig-explain">同普通海盜一樣，可以搶墩；如果捕獲人魚（而且呢墩冇骷髏王），估中叫牌仲可以加分。</p>
+        <p class="tig-explain">同普通海盜一樣，可以搶回合；如果捕獲人魚（而且呢個回合冇骷髏王），估中叫牌仲可以加分。</p>
         <button class="btn btn-ink" data-act="tig-escape">當逃脫出</button>
-        <p class="tig-explain">同逃脫一樣，通常唔會贏墩。適合你已經贏夠，唔想再攞墩嘅時候。</p>
+        <p class="tig-explain">同逃脫一樣，通常唔會贏回合。適合你已經贏夠，唔想再攞回合嘅時候。</p>
       </div>
       <button class="btn btn-sheet" data-act="tig-cancel" style="width:100%">取消，換第二張</button>
     </div>
@@ -2780,7 +2790,7 @@ function scoreHTML(v) {
   if (meRow) {
     const made = meRow.bid === meRow.taken;
     const busted = meRow.taken > meRow.bid;
-    const kicker = made ? "叫中！" : busted ? "爆咗" : "唔夠墩";
+    const kicker = made ? "叫中！" : busted ? "爆咗" : "唔夠回合";
     mineSummary = `<div class="score-hero ${made ? "made" : busted ? "missed bust" : "missed short"}">
       <div class="hero-kicker">${kicker}</div>
       <p>你叫 ${meRow.bid} 贏 ${meRow.taken}，叫牌分 ${signed(meRow.bidPoints)}${meRow.bonus ? `，獎勵 +${meRow.bonus}` : ""}，本局 ${signed(meRow.roundTotal)}</p>
@@ -2793,7 +2803,7 @@ function scoreHTML(v) {
         <button class="btn btn-gold" data-act="play-again">再嚟一場</button>
       </div>`
     : `<p>等房主決定再開一場定返回大廳。</p>`;
-  const nextLabel = v.round >= 10 ? "睇總分" : "下一局";
+  const nextLabel = v.round >= totalRounds(v) ? "睇總分" : "下一局";
   const waiting = v.continueWaitingNames || [];
   const needed = v.continueNeeded || [];
   const ready = v.continueReady || [];
@@ -2806,7 +2816,7 @@ function scoreHTML(v) {
   } else if (meReady) {
     continueBtn = `<button class="btn btn-ghost" disabled>已睇完</button>`;
   } else {
-    const waitNote = needed.length > 1 ? `<p class="start-hint">大家都睇完先會進入${v.round >= 10 ? "總分" : "下一局"}。</p>` : "";
+    const waitNote = needed.length > 1 ? `<p class="start-hint">大家都睇完先會進入${v.round >= totalRounds(v) ? "總分" : "下一局"}。</p>` : "";
     continueBtn = `${waitNote}<button class="btn btn-gold" data-act="continue">${nextLabel}</button>`;
   }
   return `<div class="overlay center">
@@ -2838,24 +2848,24 @@ function renderRules() {
       <div class="rules-page" style="color:var(--cream)">
         <h2 style="color:var(--gold-soft);margin:0 0 12px">骷髏王規則</h2>
         <h3 style="color:var(--gold)">點玩</h3>
-        <p>一共 10 局。第 1 局每人 1 張，之後每局多一張，第 10 局各 10 張。睇完手牌之後，大家一齊叫會贏幾墩（其他人嘅叫牌要等齊先睇到）。估中先有分，估錯就扣分。叫 0 即係估一墩都唔贏。</p>
+        <p>一共 5 局。第 1 局每人 6 張，之後每局多一張，第 5 局各 10 張。睇完手牌之後，大家一齊預測會贏幾多回合（其他人嘅叫牌要等齊先睇到）。估中先有分，估錯就扣分。叫 0 即係預測一個回合都唔贏。</p>
         <h3 style="color:var(--gold)">特殊牌係咩？</h3>
         <p>特殊牌隨時可出，唔使跟花。牌局入面撳「牌義」，或者手牌右上角嘅「？」，可以隨時再睇。</p>
-        <p><strong>母老虎</strong>：出牌時要宣布當海盜定逃脫。當海盜就可以搶墩；當逃脫就盡量唔贏墩。</p>
-        <p><strong>逃脫</strong>：通常唔會贏墩。<strong>海盜</strong>大過人魚同數字牌。<strong>人魚</strong>大過數字牌，而且可以捕獲骷髏王。<strong>骷髏王</strong>大過海盜，但會被人魚捕獲。</p>
-        <p><strong>八爪魚</strong>會食咗整墩，無人贏。<strong>白鯨</strong>令特殊牌作廢，由最高點數嘅數字牌贏。</p>
+        <p><strong>母老虎</strong>：出牌時要宣布當海盜定逃脫。當海盜就可以搶回合；當逃脫就盡量唔贏回合。</p>
+        <p><strong>逃脫</strong>：通常唔會贏回合。<strong>海盜</strong>大過人魚同數字牌。<strong>人魚</strong>大過數字牌，而且可以捕獲骷髏王。<strong>骷髏王</strong>大過海盜，但會被人魚捕獲。</p>
+        <p><strong>八爪魚</strong>會食咗整個回合，無人贏。<strong>白鯨</strong>令特殊牌作廢，由最高點數嘅數字牌贏。</p>
         <h3 style="color:var(--gold)">出牌</h3>
-        <p>第一張有花色嘅牌決定呢墩要跟嘅花。如果你出數字牌，有嗰種花就要跟。逃脫、海盜、人魚、母老虎、骷髏王、八爪魚同白鯨隨時都可以出，唔使跟花。黑色骷髏旗係王牌，大過其他三種顏色嘅數字牌。</p>
-        <p>如果第一張係逃脫或「母老虎當逃脫」，之後第一張數字牌先定花。如果第一張係人魚、海盜、骷髏王、「母老虎當海盜」、八爪魚或白鯨，呢墩就冇得跟花，各人可以出任何牌。如果花色已經定咗，之後先出白鯨，之後出數字牌嘅人仍然要跟嗰個已定花色。</p>
-        <h3 style="color:var(--gold)">誰贏呢墩</h3>
+        <p>第一張有花色嘅牌決定呢個回合要跟嘅花。如果你出數字牌，有嗰種花就要跟。逃脫、海盜、人魚、母老虎、骷髏王、八爪魚同白鯨隨時都可以出，唔使跟花。黑色骷髏旗係王牌，大過其他三種顏色嘅數字牌。</p>
+        <p>如果第一張係逃脫或「母老虎當逃脫」，之後第一張數字牌先定花。如果第一張係人魚、海盜、骷髏王、「母老虎當海盜」、八爪魚或白鯨，呢個回合就冇得跟花，各人可以出任何牌。如果花色已經定咗，之後先出白鯨，之後出數字牌嘅人仍然要跟嗰個已定花色。</p>
+        <h3 style="color:var(--gold)">誰贏呢個回合</h3>
         <p>人魚可以捕獲骷髏王。骷髏王大過海盜。海盜大過人魚同所有數字牌。幾個海盜或者兩條人魚一齊出現，先出嗰張贏。如果人魚、海盜同骷髏王同時出現，一定係人魚贏，而且只計人魚捕骷髏王嘅獎勵。全部都係逃脫，就由先出嗰個人贏。出母老虎時要即時宣布當海盜定逃脫。</p>
-        <p>八爪魚會食咗整墩：無人贏、牌亦唔算被捕獲（冇捕獲獎勵）。下一墩由「如果冇出八爪魚會贏嗰個人」先出。</p>
-        <p>白鯨會令特殊牌全部作廢、唔可以贏墩；所有數字牌都唔再分花色同王牌，由點數最高嗰張贏（相同點數就由先出嗰張贏）。如果呢墩淨係特殊牌，就好似八爪魚咁作廢，下一墩由出白鯨嗰個人先出。數字牌喺白鯨之下贏墩，可以收埋呢墩嘅牌，亦可以計 14 嘅獎勵，但人魚、海盜、骷髏王嘅捕獲獎勵就唔計。</p>
-        <p>如果同一墩既有八爪魚又有白鯨，得第二張出嘅獸牌有效，第一張當逃脫。若八爪魚係後出，呢墩作廢，下一墩由「兩張獸牌都冇出過會贏嗰個人」先出。一局最後一墩如果作廢，就直接完局，無人贏嗰墩。因為有墩會被食咗，一局贏墩總數可以少過派牌張數；叫 0 仍然係按呢局張數加減 10 分。</p>
+        <p>八爪魚會食咗整個回合：無人贏、牌亦唔算被捕獲（冇捕獲獎勵）。下一回合由「如果冇出八爪魚會贏嗰個人」先出。</p>
+        <p>白鯨會令特殊牌全部作廢、唔可以贏回合；所有數字牌都唔再分花色同王牌，由點數最高嗰張贏（相同點數就由先出嗰張贏）。如果呢個回合淨係特殊牌，就好似八爪魚咁作廢，下一回合由出白鯨嗰個人先出。數字牌喺白鯨之下贏回合，可以收埋呢個回合嘅牌，亦可以計 14 嘅獎勵，但人魚、海盜、骷髏王嘅捕獲獎勵就唔計。</p>
+        <p>如果同一回合既有八爪魚又有白鯨，得第二張出嘅獸牌有效，第一張當逃脫。若八爪魚係後出，呢個回合作廢，下一回合由「兩張獸牌都冇出過會贏嗰個人」先出。一局最後一回合如果作廢，就直接完局，無人贏嗰個回合。因為有回合會被食咗，一局贏回合總數可以少過派牌張數；叫 0 仍然係按呢局張數加減 10 分。</p>
         <h3 style="color:var(--gold)">計分</h3>
-        <p>叫 1 墩或以上而且估中：每墩 20 分。估錯：差幾墩就扣 10 分乘相差。叫 0 而且真係一墩都唔贏：10 分乘呢局張數；一旦贏咗墩，就要扣同樣分數。獎勵分只會喺估中叫牌時先計：普通 14 各 +10，黑色 14 +20（誰出都係贏墩嗰個人收）；海盜捕人魚每條 +20；骷髏王捕海盜每個 +30；人魚捕骷髏王 +40。</p>
+        <p>叫 1 回合或以上而且估中：每回合 20 分。估錯：差幾回合就扣 10 分乘相差。叫 0 而且真係一個回合都唔贏：10 分乘呢局張數；一旦贏咗回合，就要扣同樣分數。獎勵分只會喺估中叫牌時先計：普通 14 各 +10，黑色 14 +20（誰出都係贏回合嗰個人收）；海盜捕人魚每條 +20；骷髏王捕海盜每個 +30；人魚捕骷髏王 +40。</p>
         <h3 style="color:var(--gold)">呢個版本</h3>
-        <p>用 2021 年起 Grand Prix 規則，包括八爪魚同白鯨。牌組 72 張：黃寶藏箱、綠鸚鵡、紫海盜地圖、黑骷髏旗各 1–14，再加 5 張逃脫、5 張海盜、2 條人魚、1 張母老虎、1 張骷髏王、1 張八爪魚同 1 張白鯨。2 至 6 人，莊家輪流，莊家左邊先出第一墩。暫時唔包括贓物牌。</p>
+        <p>用 2021 年起 Grand Prix 規則，包括八爪魚同白鯨。牌組 72 張：黃寶藏箱、綠鸚鵡、紫海盜地圖、黑骷髏旗各 1–14，再加 5 張逃脫、5 張海盜、2 條人魚、1 張母老虎、1 張骷髏王、1 張八爪魚同 1 張白鯨。2 至 6 人，莊家輪流，莊家左邊先出第一回合。暫時唔包括贓物牌。</p>
       </div>
     </div>
   `;

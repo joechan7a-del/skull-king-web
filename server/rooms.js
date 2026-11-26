@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { Game, PHASE } from "./game.js";
-import { AI_NAMES } from "./ai.js";
+import { pickAINames } from "./ai.js";
 
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const ROOM_TTL_MS = 3 * 60 * 60 * 1000;
@@ -29,7 +29,8 @@ export function trickReviewDelayMs(game) {
 export { TRICK_PAUSE_MS, AI_PAUSE_MS };
 
 export class RoomManager {
-  constructor() {
+  constructor({ rng } = {}) {
+    this.rng = typeof rng === "function" ? rng : Math.random;
     this.rooms = new Map();
     this.tokenToRoom = new Map();
     this._janitor = setInterval(() => this.cleanup(), 60 * 1000);
@@ -173,14 +174,14 @@ export class RoomManager {
     let seats = [];
     for (const h of humans) seats.push({ id: h.id, name: h.name, isAI: false });
     if (room.aiFill) {
-      let aiIndex = 0;
-      while (seats.length < room.seats && aiIndex < AI_NAMES.length) {
+      const need = Math.max(0, room.seats - seats.length);
+      const names = pickAINames(need, seats.map((s) => s.name), this.rng);
+      for (let aiIndex = 0; aiIndex < names.length; aiIndex++) {
         seats.push({
           id: `ai-${room.code}-${aiIndex}`,
-          name: AI_NAMES[aiIndex],
+          name: names[aiIndex],
           isAI: true,
         });
-        aiIndex++;
       }
     }
     if (seats.length < 2) return { error: "至少要兩個人先開得（可以加電腦補位）。" };
@@ -210,7 +211,11 @@ export class RoomManager {
       return { error: "要打完先可以再嚟一場。" };
     }
     if (room.hostId !== playerId) return { error: "得房主可以再開一場。" };
-    // Keep the same lineup (humans + the AI that were seated).
+    // Same seats and colors; draw a fresh AI name set for the new match.
+    const reserved = room.game.players.filter((p) => !p.isAI).map((p) => p.name);
+    const ais = room.game.players.filter((p) => p.isAI);
+    const names = pickAINames(ais.length, reserved, this.rng);
+    ais.forEach((p, i) => { p.name = names[i]; });
     room.game.playAgain();
     room.continuing = new Set();
     this.touch(room);
@@ -349,12 +354,13 @@ export class RoomManager {
       aiFill: room.aiFill,
       youAreHost: room.hostId === playerId,
       yourId: playerId,
-      lobbyPlayers: room.humans.map((h) => ({
+      lobbyPlayers: room.humans.map((h, i) => ({
         id: h.id,
         name: h.name,
         ready: h.ready,
         connected: h.connected,
         isHost: h.id === room.hostId,
+        colorIndex: i,
       })),
       inGame: !!room.game,
     };
@@ -365,10 +371,11 @@ export class RoomManager {
         ...base,
         phase: "lobby",
         statusMessage: this._lobbyStatus(room, aiCount, filled),
-        previewAI: AI_NAMES.slice(0, aiCount).map((name, i) => ({
+        previewAI: Array.from({ length: aiCount }, (_, i) => ({
           id: `preview-ai-${i}`,
-          name,
+          name: "電腦補位",
           isAI: true,
+          colorIndex: room.humans.length + i,
         })),
       };
     }
@@ -397,7 +404,7 @@ export class RoomManager {
   _lobbyStatus(room, aiCount) {
     const n = room.humans.length;
     const bits = [`${n} 個人已加入`];
-    if (room.aiFill && aiCount > 0) bits.push(`開始後會加 ${aiCount} 個電腦（${AI_NAMES.slice(0, aiCount).join("、")}）`);
+    if (room.aiFill && aiCount > 0) bits.push(`開始後會加 ${aiCount} 個電腦，名子每場隨機`);
     else if (!room.aiFill && n < 2) bits.push("至少再等多一個人，或者開電腦補位");
     return bits.join("。") + "。";
   }

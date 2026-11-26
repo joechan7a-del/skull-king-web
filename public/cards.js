@@ -32,13 +32,13 @@ export const SPECIAL_INFO = {
 
 /** Short Cantonese explainers for first-time players. */
 export const CARD_HELP = {
-  escape: "永遠唔會搶墩（除非呢墩全部都係逃脫，就由先出嗰張贏）。唔使跟花，想唔贏墩就出佢。",
-  pirate: "大過人魚同所有數字牌，細過骷髏王。唔使跟花。如果海盜捕獲人魚（而且呢墩冇骷髏王），估中叫牌可以加分。",
+  escape: "永遠唔會搶回合（除非呢個回合全部都係逃脫，就由先出嗰張贏）。唔使跟花，想唔贏回合就出佢。",
+  pirate: "大過人魚同所有數字牌，細過骷髏王。唔使跟花。如果海盜捕獲人魚（而且呢個回合冇骷髏王），估中叫牌可以加分。",
   mermaid: "大過所有數字牌，細過海盜；但人魚可以捕獲骷髏王（即使同時有海盜，都係人魚贏）。唔使跟花。",
-  tigress: "母老虎係一張要「變身」嘅特殊牌：出嚟嗰陣你要即場宣布當海盜定逃脫。當海盜就可以搶墩；當逃脫就盡量唔贏墩。佢本身冇第三種打法。",
+  tigress: "母老虎係一張要「變身」嘅特殊牌：出嚟嗰陣你要即場宣布當海盜定逃脫。當海盜就可以搶回合；當逃脫就盡量唔贏回合。佢本身冇第三種打法。",
   skullKing: "大過海盜同所有數字牌，但會被人魚捕獲。唔使跟花。如果骷髏王捕獲海盜，估中叫牌可以加分。",
-  kraken: "會食咗整墩：無人贏、亦冇捕獲獎勵。下一墩由「如果冇出八爪魚會贏嗰個人」先出。唔使跟花。",
-  whiteWhale: "特殊牌全部作廢，由點數最高嘅數字牌贏，唔分花色同王牌。如果淨係特殊牌，呢墩作廢，下一墩由出白鯨嗰個人先出。唔使跟花。",
+  kraken: "會食咗整個回合：無人贏、亦冇捕獲獎勵。下一回合由「如果冇出八爪魚會贏嗰個人」先出。唔使跟花。",
+  whiteWhale: "特殊牌全部作廢，由點數最高嘅數字牌贏，唔分花色同王牌。如果淨係特殊牌，呢個回合作廢，下一回合由出白鯨嗰個人先出。唔使跟花。",
 };
 
 export function suitLabel(suit) {
@@ -50,10 +50,10 @@ export function suitLabel(suit) {
 export function cardHelpText(card, { tigressAsPirate = null } = {}) {
   if (card?.special) {
     if (card.special === "tigress" && tigressAsPirate === true) {
-      return "呢張母老虎已宣布當海盜：同普通海盜一樣可以搶墩。";
+      return "呢張母老虎已宣布當海盜：同普通海盜一樣可以搶回合。";
     }
     if (card.special === "tigress" && tigressAsPirate === false) {
-      return "呢張母老虎已宣布當逃脫：通常唔會贏墩。";
+      return "呢張母老虎已宣布當逃脫：通常唔會贏回合。";
     }
     return CARD_HELP[card.special] || "";
   }

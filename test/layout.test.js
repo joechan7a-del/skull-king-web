@@ -61,7 +61,7 @@ test("the felt keeps a locked mid-trick proportion on every in-game screen", () 
   assert.match(render, /circleTableHTML\(v\)/);
   const dockChunk = render.slice(render.indexOf("table-dock"), render.indexOf("pendingTigress"));
   assert.doesNotMatch(dockChunk, /circleTableHTML/);
-  assert.match(html, /app\.js\?v=c19/);
+  assert.match(html, /app\.js\?v=c20/);
   // overlays must stay out of the table flex flow
   assert.match(css, /\.confirm-bar\s*\{[^}]*position:\s*absolute/s);
   const banner = block(css, ".banner");
@@ -82,7 +82,8 @@ test("home cover shrinks to leave room for 開房, join, and 遊戲規則", () =
 
 test("lobby keeps the room code and start actions outside the scrolling list", () => {
   const idx = js.indexOf("function renderLobby");
-  const chunk = js.slice(idx, idx + 4500);
+  const end = js.indexOf("\nfunction signed", idx);
+  const chunk = js.slice(idx, end > idx ? end : idx + 16000);
   const hero = chunk.indexOf("code-hero");
   const scroll = chunk.indexOf("lobby-scroll");
   const actions = chunk.indexOf("lobby-actions");
@@ -127,10 +128,10 @@ test("the bulky follow-suit banner is gone; a corner hint and led-suit tint rema
   assert.doesNotMatch(js, /turn-banner wait/);
   assert.match(js, /function ledSuitActive/);
   assert.match(js, /function followSuitHintHTML/);
-  assert.match(js, /呢墩要跟黑色（骷髏旗）/);
-  assert.match(js, /呢墩要跟黃色/);
-  assert.match(js, /呢墩要跟綠色（鸚鵡）/);
-  assert.match(js, /呢墩要跟紫色/);
+  assert.match(js, /呢個回合要跟黑色（骷髏旗）/);
+  assert.match(js, /呢個回合要跟黃色/);
+  assert.match(js, /呢個回合要跟綠色（鸚鵡）/);
+  assert.match(js, /呢個回合要跟紫色/);
   assert.match(js, /follow-suit-hint/);
   assert.match(js, /followSuitHintHTML\(v\)/);
   assert.match(js, /led-\$\{ledClass\}/);
@@ -193,7 +194,7 @@ test("trick and round results are overlay dialogs and do not shrink the table", 
   const score = js.slice(js.indexOf("function scoreHTML"), js.indexOf("function renderRules"));
   assert.match(score, /class="overlay center"/);
   assert.match(score, /下一局/);
-  assert.match(html, /app\.js\?v=c19/);
+  assert.match(html, /app\.js\?v=c20/);
 });
 
 test("AI plays and post-win pauses are modestly longer", () => {
@@ -256,3 +257,52 @@ test("a selected hand card keeps its size and stacks above its neighbours", () =
   assert.match(chunk, /scale\(1\)/);
   assert.match(chunk, /aspect-ratio:\s*2\.4\s*\/\s*3\.5/);
 });
+
+test("bid buttons pulse a gentle border until the player has bid", () => {
+  assert.match(js, /bid-need-pick/);
+  assert.match(js, /bid-need-confirm/);
+  assert.match(js, /needFirstBid && state\.bidValue == null/);
+  assert.match(css, /@keyframes bid-need-pulse/);
+  assert.match(css, /\.bid-grid\.bid-need-pick button/);
+  assert.match(css, /\.btn\.bid-need-confirm/);
+  const reduce = css.slice(css.indexOf("@media (prefers-reduced-motion: reduce)"));
+  assert.match(reduce, /bid-need-pick/);
+  assert.match(reduce, /bid-need-confirm/);
+  assert.match(css, /animation:\s*bid-need-pulse 1\.7s/);
+});
+
+test("match format is five rounds dealing 6 through 10 cards", () => {
+  const game = readFileSync(join(root, "server/game.js"), "utf8");
+  assert.match(game, /export const TOTAL_ROUNDS = 5/);
+  assert.match(game, /return cardsDealtForRound\(this\.round\)/);
+  assert.match(game, /round \+ 5/);
+  assert.match(js, /一共 5 局。第 1 局每人 6 張/);
+  assert.match(js, /第 5 局各 10 張/);
+  assert.match(js, /第 \$\{v\.round\} 局／\$\{totalRounds\(v\)\}/);
+});
+
+test("player-facing copy says 回合, not 墩, and the bid title is exact", () => {
+  assert.match(js, /預測會贏幾多回合？/);
+  assert.doesNotMatch(js, /你估會贏幾墩？/);
+  assert.doesNotMatch(js, /你估會贏幾回合？/);
+  const cards = readFileSync(join(root, "public/cards.js"), "utf8");
+  const game = readFileSync(join(root, "server/game.js"), "utf8");
+  const rules = readFileSync(join(root, "server/rules.js"), "utf8");
+  for (const [name, src] of [["app", js], ["cards", cards], ["game", game], ["rules", rules]]) {
+    assert.equal(src.includes("墩"), false, `${name} still contains 墩`);
+  }
+  assert.match(js, /一共 5 局/);
+});
+
+test("avatar colors follow a stable seat index, not a hashed name or id", () => {
+  const fn = js.slice(js.indexOf("function avatarStyle"), js.indexOf("function phoneLandscape"));
+  assert.match(fn, /colorIndex/);
+  assert.doesNotMatch(fn, /charCodeAt/);
+  assert.doesNotMatch(fn, /2166136261/);
+  assert.match(js, /avatarStyle\(p\.colorIndex \?\? playerIndex\)/);
+  assert.match(css, /background:\s*var\(--av-bg/);
+  const gold = css.slice(css.indexOf(".avatar.tone.gold"));
+  assert.match(gold.slice(0, 400), /--av-bg/);
+  assert.doesNotMatch(gold.slice(0, 280), /background:\s*var\(--gold\)/);
+});
+

@@ -424,10 +424,10 @@ export function explainTrick(trick) {
   const winName = winPlay ? playedDisplayName(winPlay) : "";
 
   if (outcome.effect === "kraken") {
-    return "八爪魚令呢墩作廢，冇人贏墩。";
+    return "八爪魚令呢個回合作廢，冇人贏呢個回合。";
   }
   if (outcome.effect === "whiteWhale") {
-    if (outcome.destroyed) return "白鯨出咗，但呢墩冇數字牌，所以作廢。";
+    if (outcome.destroyed) return "白鯨出咗，但呢個回合冇數字牌，所以作廢。";
     const same = trick.filter(isSuitCard).filter((p) => p.card.rank === winPlay.card.rank);
     if (same.length > 1) return `白鯨令特殊牌唔計，最高點數相同就由先出嘅${winName}贏。`;
     return `白鯨令特殊牌唔計，由點數最高嘅${winName}贏。`;
