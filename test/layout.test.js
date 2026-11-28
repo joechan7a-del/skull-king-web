@@ -61,7 +61,7 @@ test("the felt keeps a locked mid-trick proportion on every in-game screen", () 
   assert.match(render, /circleTableHTML\(v\)/);
   const dockChunk = render.slice(render.indexOf("table-dock"), render.indexOf("pendingTigress"));
   assert.doesNotMatch(dockChunk, /circleTableHTML/);
-  assert.match(html, /app\.js\?v=c20/);
+  assert.match(html, /app\.js\?v=c21/);
   // overlays must stay out of the table flex flow
   assert.match(css, /\.confirm-bar\s*\{[^}]*position:\s*absolute/s);
   const banner = block(css, ".banner");
@@ -194,7 +194,7 @@ test("trick and round results are overlay dialogs and do not shrink the table", 
   const score = js.slice(js.indexOf("function scoreHTML"), js.indexOf("function renderRules"));
   assert.match(score, /class="overlay center"/);
   assert.match(score, /下一局/);
-  assert.match(html, /app\.js\?v=c20/);
+  assert.match(html, /app\.js\?v=c21/);
 });
 
 test("AI plays and post-win pauses are modestly longer", () => {

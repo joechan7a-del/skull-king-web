@@ -2790,7 +2790,7 @@ function scoreHTML(v) {
   if (meRow) {
     const made = meRow.bid === meRow.taken;
     const busted = meRow.taken > meRow.bid;
-    const kicker = made ? "叫中！" : busted ? "爆咗" : "唔夠回合";
+    const kicker = made ? "叫中！" : busted ? "爆咗" : "贏唔夠回合";
     mineSummary = `<div class="score-hero ${made ? "made" : busted ? "missed bust" : "missed short"}">
       <div class="hero-kicker">${kicker}</div>
       <p>你叫 ${meRow.bid} 贏 ${meRow.taken}，叫牌分 ${signed(meRow.bidPoints)}${meRow.bonus ? `，獎勵 +${meRow.bonus}` : ""}，本局 ${signed(meRow.roundTotal)}</p>
