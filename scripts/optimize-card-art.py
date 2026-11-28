@@ -19,17 +19,25 @@ SRC = Path("/workspace/card-art/originals")
 LONG_SIDE = 1100
 WEBP_QUALITY = 80
 
-# Badge enlargement. Scale is applied about the corner-side of the badge
-# so growth runs inward; specials fade sooner so names stay visible.
+# Badge enlargement: scale the painted TL/BR icon and sit it flush
+# inside the 70px black frame so the complete icon stays visible.
 BORDER = 70
 CENTER_INSET = 200
-RADIUS_SPECIAL = 232
-RADIUS_NUMBER = 286
-SCALE = 1.58
-FEATHER = 42
-CORNER_SHIFT = 26
-SPECIAL_FADE = (500, 590)
-NUMBER_FADE = (700, 820)
+SCALE = 1.38
+FRAME_PAD = 6
+FEATHER = 48
+# Tight crop/radius for numbered suits and compact specials (keeps names).
+CROP_NUMBER = 620
+RADIUS_NUMBER = 330
+NUMBER_FADE = (740, 880)
+CROP_SPECIAL = 620
+RADIUS_SPECIAL = 300
+SPECIAL_FADE = (540, 660)
+# Wide icons (tigress flag, escape flag) need a larger mask and a later fade.
+CROP_WIDE = 740
+RADIUS_WIDE = 430
+WIDE_FADE = (700, 840)
+WIDE_NAMES = {"escape", "tigress-0", "tigress-1"}
 
 ART = {}
 for rank in range(1, 15):
@@ -74,36 +82,42 @@ def _feathered_circle(size: tuple[int, int], cx: float, cy: float, radius: float
     return (1 - np.cos(alpha * np.pi)) / 2
 
 
-def enlarge_corner_badges(im: Image.Image, special: bool) -> Image.Image:
+def enlarge_corner_badges(im: Image.Image, special: bool, wide: bool = False) -> Image.Image:
+    """Scale the painted corner icon and place it fully inside the black frame."""
     rgb = im.convert("RGB")
     w, h = rgb.size
     base = rgb.convert("RGBA")
-    fade_in, fade_out = SPECIAL_FADE if special else NUMBER_FADE
-    radius = RADIUS_SPECIAL if special else RADIUS_NUMBER
+    if wide:
+        fade_in, fade_out = WIDE_FADE
+        radius = RADIUS_WIDE
+        crop_r = CROP_WIDE
+    elif special:
+        fade_in, fade_out = SPECIAL_FADE
+        radius = RADIUS_SPECIAL
+        crop_r = CROP_SPECIAL
+    else:
+        fade_in, fade_out = NUMBER_FADE
+        radius = RADIUS_NUMBER
+        crop_r = CROP_NUMBER
     for corner in ("TL", "BR"):
         if corner == "TL":
-            cx, cy = BORDER + CENTER_INSET, BORDER + CENTER_INSET
-            tx, ty = BORDER, BORDER
+            x0, y0 = BORDER, BORDER
+            x1, y1 = min(w, BORDER + crop_r), min(h, BORDER + crop_r)
         else:
-            cx, cy = w - BORDER - CENTER_INSET, h - BORDER - CENTER_INSET
-            tx, ty = w - BORDER, h - BORDER
-        vx, vy = tx - cx, ty - cy
-        length = math.hypot(vx, vy) or 1.0
-        ux, uy = vx / length, vy / length
-        ax, ay = cx + ux * radius, cy + uy * radius
-        pad = int(radius + FEATHER + 8)
-        x0, y0 = max(0, int(round(cx - pad))), max(0, int(round(cy - pad)))
-        x1, y1 = min(w, int(round(cx + pad))), min(h, int(round(cy + pad)))
+            x0, y0 = max(0, w - BORDER - crop_r), max(0, h - BORDER - crop_r)
+            x1, y1 = w - BORDER, h - BORDER
         crop = rgb.crop((x0, y0, x1, y1))
         sw, sh = max(1, round(crop.size[0] * SCALE)), max(1, round(crop.size[1] * SCALE))
         scaled = crop.resize((sw, sh), Image.Resampling.LANCZOS)
-        # Keep the corner-side point fixed, then ease the badge a little closer to the frame.
-        px = int(round(ax + SCALE * (x0 - ax) + ux * CORNER_SHIFT))
-        py = int(round(ay + SCALE * (y0 - ay) + uy * CORNER_SHIFT))
-        ncx = ax + SCALE * (cx - ax) + ux * CORNER_SHIFT
-        ncy = ay + SCALE * (cy - ay) + uy * CORNER_SHIFT
-        circle = _feathered_circle((sw, sh), ncx - px, ncy - py, radius * SCALE, FEATHER * SCALE)
-        # Soft cap so enlarged specials do not swallow bottom names.
+        if corner == "TL":
+            px, py = BORDER + FRAME_PAD, BORDER + FRAME_PAD
+            ocx, ocy = BORDER + CENTER_INSET, BORDER + CENTER_INSET
+        else:
+            px, py = w - BORDER - FRAME_PAD - sw, h - BORDER - FRAME_PAD - sh
+            ocx, ocy = w - BORDER - CENTER_INSET, h - BORDER - CENTER_INSET
+        ncx = (ocx - x0) * SCALE
+        ncy = (ocy - y0) * SCALE
+        circle = _feathered_circle((sw, sh), ncx, ncy, radius * SCALE, FEATHER * SCALE)
         ys = np.arange(sh, dtype=np.float32)[:, None] + py
         xs = np.arange(sw, dtype=np.float32)[None, :] + px
         if corner == "TL":
@@ -206,7 +220,7 @@ def compress_one(name: str, number: int) -> tuple[str, int, tuple[int, int]]:
     if number in FORBIDDEN:
         raise RuntimeError(f"refusing to pack unused original {number}")
     im = Image.open(path)
-    im = enlarge_corner_badges(im, special=name in SPECIAL_NAMES)
+    im = enlarge_corner_badges(im, special=name in SPECIAL_NAMES, wide=name in WIDE_NAMES)
     if name.startswith(COLOR_SUITS):
         im = bolden_rank_numbers(im)
     w, h = im.size

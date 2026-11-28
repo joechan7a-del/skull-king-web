@@ -8,6 +8,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const css = readFileSync(join(root, "public/styles.css"), "utf8");
 const js = readFileSync(join(root, "public/app.js"), "utf8");
 const html = readFileSync(join(root, "public/index.html"), "utf8");
+const cards = readFileSync(join(root, "public/cards.js"), "utf8");
 
 function block(src, selector) {
   const re = new RegExp(selector.replace(".", "\\.") + "\\s*\\{([^}]+)\\}");
@@ -61,7 +62,7 @@ test("the felt keeps a locked mid-trick proportion on every in-game screen", () 
   assert.match(render, /circleTableHTML\(v\)/);
   const dockChunk = render.slice(render.indexOf("table-dock"), render.indexOf("pendingTigress"));
   assert.doesNotMatch(dockChunk, /circleTableHTML/);
-  assert.match(html, /app\.js\?v=c25/);
+  assert.match(html, /app\.js\?v=c26/);
   // overlays must stay out of the table flex flow
   assert.match(css, /\.confirm-bar\s*\{[^}]*position:\s*absolute/s);
   const banner = block(css, ".banner");
@@ -192,11 +193,11 @@ test("trick and round results are overlay dialogs and do not shrink the table", 
   assert.match(bar, /background:\s*none/);
   const winCard = css.slice(css.indexOf(".seat-card.winner .sk-card"));
   assert.match(winCard.slice(0, 500), /scale\(1\.12\)/);
-  assert.match(winCard.slice(0, 500), /aspect-ratio:\s*2\.4\s*\/\s*3\.5/);
+  assert.match(winCard.slice(0, 500), /aspect-ratio:\s*784\s*\/\s*1100/);
   const score = js.slice(js.indexOf("function scoreHTML"), js.indexOf("function renderRules"));
   assert.match(score, /class="overlay center"/);
   assert.match(score, /下一局/);
-  assert.match(html, /app\.js\?v=c25/);
+  assert.match(html, /app\.js\?v=c26/);
 });
 
 test("AI plays and post-win pauses are modestly longer", () => {
@@ -257,7 +258,7 @@ test("a selected hand card keeps its size and stacks above its neighbours", () =
   assert.doesNotMatch(chunk, /scale\(1\.1\)/);
   assert.doesNotMatch(chunk, /scale\(1\.06\)/);
   assert.match(chunk, /scale\(1\)/);
-  assert.match(chunk, /aspect-ratio:\s*2\.4\s*\/\s*3\.5/);
+  assert.match(chunk, /aspect-ratio:\s*784\s*\/\s*1100/);
 });
 
 test("bid buttons pulse a gentle border until the player has bid", () => {
@@ -320,7 +321,7 @@ test("cardFaceHTML uses compressed house-rule art and does not overlay a second 
   assert.match(css, /\.sk-card-art/);
   assert.match(css, /object-fit:\s*contain/);
   const sk = css.slice(css.indexOf("\n.sk-card {"), css.indexOf("\n.sk-card.compact"));
-  assert.match(sk, /aspect-ratio:\s*2\.4\s*\/\s*3\.5/);
+  assert.match(sk, /aspect-ratio:\s*784\s*\/\s*1100/);
 });
 
 test("rules copy describes the 74-card house deck", () => {
@@ -330,9 +331,9 @@ test("rules copy describes the 74-card house deck", () => {
   assert.doesNotMatch(js, /牌組 72 張：/);
 });
 
-test("cache bust is c25 and the site uses a licensed HK webfont", () => {
-  assert.match(html, /app\.js\?v=c25/);
-  assert.match(html, /styles\.css\?v=c25/);
+test("cache bust is c26 and the site uses a licensed HK webfont", () => {
+  assert.match(html, /app\.js\?v=c26/);
+  assert.match(html, /styles\.css\?v=c26/);
   assert.match(html, /fonts\.googleapis\.com/);
   assert.match(html, /Chiron\+Hei\+HK/);
   assert.match(css, /"Chiron Hei HK"/);
@@ -408,7 +409,7 @@ test("a single tap on a hand card opens the large preview, not a long-press", ()
   assert.match(css, /inspect-card-sheet/);
   const card = block(css, ".inspect-sheet.inspect-card-sheet .inspect-card .sk-card");
   assert.match(card, /76vw|58dvh|440px/);
-  assert.match(card, /aspect-ratio:\s*2\.4 \/ 3\.5/);
+  assert.match(card, /aspect-ratio:\s*784 \/ 1100/);
 });
 
 test("知道喇 is gone from the playing UI", () => {
@@ -419,3 +420,51 @@ test("知道喇 is gone from the playing UI", () => {
   assert.doesNotMatch(inspectFn, /知道喇/);
 });
 
+test("assets preload behind a Loading screen with a progress bar", () => {
+  assert.match(html, /id="asset-loader"/);
+  assert.match(html, />Loading</);
+  assert.match(html, /icon-192\.png/);
+  assert.match(html, /asset-loader-bar/);
+  assert.match(js, /function startAssetPreload/);
+  assert.match(js, /allCardArtUrls/);
+  assert.match(js, /function bindAssetLoader/);
+  assert.match(css, /\.asset-loader/);
+  assert.match(css, /\.asset-loader-word/);
+  assert.match(cards, /export function allCardArtUrls/);
+  assert.match(cards, /CARD_ART_FILES/);
+});
+
+test("輪到你出牌 sits in the hand tray and pulses, not in the top cue row", () => {
+  const cues = js.slice(js.indexOf("function tableCuesRowHTML"), js.indexOf("function submitLobbyName"));
+  assert.doesNotMatch(cues, /yourTurnHintHTML/);
+  assert.match(js, /hand-tray-mid/);
+  const table = js.slice(js.indexOf("function renderTable"), js.indexOf("function handOverlap"));
+  assert.match(table, /hand-tray-mid/);
+  assert.match(table, /yourTurnHintHTML\(v\)/);
+  assert.match(table, /followSuitHintHTML\(v\)/);
+  assert.match(css, /@keyframes your-turn-pulse/);
+  assert.match(css, /\.your-turn-hint/);
+  assert.match(css, /\.hand-tray-mid/);
+});
+
+test("the inspect preview animates the character; hand and table cards stay still", () => {
+  const inspectFn = js.slice(js.indexOf("function inspectHTML"), js.indexOf("function renderHome"));
+  assert.match(inspectFn, /animated:\s*true/);
+  const table = js.slice(js.indexOf("function renderTable"), js.indexOf("function handOverlap"));
+  assert.doesNotMatch(table, /animated:\s*true/);
+  assert.match(cards, /animated = false/);
+  assert.match(cards, /sk-card-bob/);
+  assert.match(cards, /sk-card-vfx/);
+  assert.match(css, /@keyframes card-char-bob/);
+  assert.match(css, /0\.55s/);
+  assert.match(css, /@keyframes card-vfx-spin/);
+});
+
+test("corner badges sit inside the frame and colour-suit ranks stay bold", () => {
+  const opt = readFileSync(join(root, "scripts/optimize-card-art.py"), "utf8");
+  assert.match(opt, /FRAME_PAD/);
+  assert.match(opt, /WIDE_NAMES/);
+  assert.match(opt, /bolden_rank_numbers/);
+  assert.match(opt, /COLOR_SUITS/);
+  assert.doesNotMatch(opt, /CORNER_SHIFT = 26/);
+});

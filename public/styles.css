@@ -542,7 +542,7 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   min-height: 148px;
   max-height: none;
   margin: 2px 0 var(--dock-reserve, 208px) 0;
-  padding: 52px 44px 68px;
+  padding: 32px 18px 44px;
   container-type: size;
   display: grid;
   place-items: center;
@@ -554,14 +554,14 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   height: 100%;
   max-width: 100%;
   overflow: visible;
-  --card-in: clamp(52px, 13cqh, 62px);
+  --card-in: clamp(58px, 14cqh, 70px);
 }
 .table-felt {
   position: absolute;
-  left: 13%;
-  right: 13%;
-  top: 15%;
-  bottom: 17%;
+  left: 9%;
+  right: 9%;
+  top: 11%;
+  bottom: 13%;
   border-radius: 50%;
   background:
     radial-gradient(ellipse at 50% 38%, #1e5a42 0%, #134533 48%, #0c2c22 100%);
@@ -944,7 +944,7 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
 .seat-card .sk-card {
   width: 46px;
   height: auto;
-  aspect-ratio: 2.4 / 3.5;
+  aspect-ratio: 784 / 1100;
   border-radius: 8px;
   filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.45));
 }
@@ -961,7 +961,7 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
 .seat-card.void-cause .sk-card {
   transform: scale(1.12);
   transform-origin: center center;
-  aspect-ratio: 2.4 / 3.5;
+  aspect-ratio: 784 / 1100;
   height: auto;
   box-shadow: 0 0 0 2px #fff4c4, 0 0 0 5px var(--gold);
   filter: drop-shadow(0 0 8px rgba(237, 191, 89, 0.9));
@@ -976,7 +976,7 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
 }
 .seat-card.leading-now .sk-card {
   box-shadow: 0 0 0 2px #fff8dc, 0 0 0 4px var(--gold), 0 0 12px rgba(237, 191, 89, 0.7);
-  /* glow only — do not scale or change the 2.4/3.5 box */
+  /* glow only — do not scale or change the 784/1100 box */
 }
 .seat-win.void-cause-tag {
   background: #9b3b2a;
@@ -986,7 +986,7 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
 .seat-card.slam .sk-card {
   animation: card-slam 0.4s cubic-bezier(0.2, 0.8, 0.25, 1);
   transform-origin: center center;
-  aspect-ratio: 2.4 / 3.5;
+  aspect-ratio: 784 / 1100;
   height: auto;
   border-radius: 8px;
 }
@@ -1008,18 +1008,18 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   text-shadow: 0 1px 2px rgba(0,0,0,0.6);
 }
 .card-slot {
-  width: 46px;
+  width: 54px;
   height: auto;
-  aspect-ratio: 2.4 / 3.5;
+  aspect-ratio: 784 / 1100;
   border-radius: 7px;
   border: 1.5px dashed rgba(255, 255, 255, 0.16);
   background: rgba(0, 0, 0, 0.12);
 }
-.circle-table.n-5, .circle-table.n-6 { --card-in: clamp(52px, 13cqh, 64px); }
+.circle-table.n-5, .circle-table.n-6 { --card-in: clamp(58px, 14cqh, 72px); }
 .circle-table.n-5 .seat-card .sk-card,
 .circle-table.n-6 .seat-card .sk-card,
 .circle-table.n-5 .card-slot,
-.circle-table.n-6 .card-slot { width: 44px; }
+.circle-table.n-6 .card-slot { width: 52px; }
 
 .seat-meta {
   position: absolute;
@@ -1029,13 +1029,13 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   min-width: 0;
 }
 .seat.place-bottom .seat-meta {
-  top: 20px;
+  top: 26px;
   left: 0;
   transform: translateX(-50%);
   text-align: center;
 }
 .seat.place-top .seat-meta {
-  bottom: 16px;
+  bottom: 22px;
   left: 0;
   transform: translateX(-50%);
   text-align: center;
@@ -1048,35 +1048,35 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   clip: rect(0, 0, 0, 0);
 }
 .seat.place-left .seat-meta {
-  right: 18px;
+  right: 22px;
   top: 0;
   transform: translateY(-50%);
   text-align: right;
 }
 .seat.place-right .seat-meta {
-  left: 18px;
+  left: 22px;
   top: 0;
   transform: translateY(-50%);
   text-align: left;
 }
 .seat.place-bottom-left .seat-meta {
-  top: 16px;
-  right: 8px;
+  top: 22px;
+  right: 12px;
   text-align: right;
 }
 .seat.place-top-left .seat-meta {
-  bottom: 16px;
-  right: 8px;
+  bottom: 22px;
+  right: 12px;
   text-align: right;
 }
 .seat.place-top-right .seat-meta {
-  bottom: 16px;
-  left: 8px;
+  bottom: 22px;
+  left: 12px;
   text-align: left;
 }
 .seat.place-bottom-right .seat-meta {
-  top: 16px;
-  left: 8px;
+  top: 22px;
+  left: 12px;
   text-align: left;
 }
 .seat.place-left .nm-row,
@@ -1274,7 +1274,7 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   flex: 0 0 auto;
   width: 100%;
   height: auto;
-  aspect-ratio: 2.4 / 3.5;
+  aspect-ratio: 784 / 1100;
   border-radius: 9px;
   cursor: pointer;
   transform-origin: center bottom;
@@ -1293,7 +1293,7 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   filter: brightness(1.06) drop-shadow(0 2px 4px rgba(0,0,0,0.4));
   width: 100%;
   height: auto;
-  aspect-ratio: 2.4 / 3.5;
+  aspect-ratio: 784 / 1100;
   border-radius: 9px;
   box-shadow: none;
   z-index: 40;
@@ -1316,7 +1316,7 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
 .sk-card {
   width: 76px;
   height: auto;
-  aspect-ratio: 2.4 / 3.5;
+  aspect-ratio: 784 / 1100;
   border-radius: 9px;
   position: relative;
   filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
@@ -1585,9 +1585,9 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
 .inspect-sheet.inspect-card-sheet .inspect-card { margin: 2px 0 10px; }
 .inspect-sheet.inspect-card-sheet .inspect-card .sk-card {
   width: auto;
-  height: min(58dvh, calc(76vw * 3.5 / 2.4), 440px);
-  max-width: min(300px, 76vw, 100%);
-  aspect-ratio: 2.4 / 3.5;
+  height: min(58dvh, calc(76vw * 1100 / 784), 440px);
+  max-width: min(314px, 76vw, 100%);
+  aspect-ratio: 784 / 1100;
   filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.28));
 }
 .inspect-play-actions {
@@ -1683,7 +1683,7 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
 .trick-result-card .sk-card {
   width: 48px;
   height: auto;
-  aspect-ratio: 2.4 / 3.5;
+  aspect-ratio: 784 / 1100;
   border-radius: 8px;
   filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35));
 }
@@ -1748,13 +1748,13 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   .sk-card { width: 84px; }
   .brand-cover { width: min(168px, 26vw); max-height: min(24svh, 200px); }
   .brand-cover img { max-height: min(24svh, 200px); }
-  .seat-card .sk-card, .card-slot { width: 60px; }
-  .circle-table { --card-in: clamp(60px, 15cqh, 72px); }
-  .circle-table.n-5, .circle-table.n-6 { --card-in: clamp(56px, 14cqh, 68px); }
+  .seat-card .sk-card, .card-slot { width: 68px; }
+  .circle-table { --card-in: clamp(66px, 16cqh, 80px); }
+  .circle-table.n-5, .circle-table.n-6 { --card-in: clamp(62px, 15cqh, 76px); }
   .circle-table.n-5 .seat-card .sk-card,
   .circle-table.n-6 .seat-card .sk-card,
   .circle-table.n-5 .card-slot,
-  .circle-table.n-6 .card-slot { width: 54px; }
+  .circle-table.n-6 .card-slot { width: 62px; }
   .seat .avatar { width: 36px; height: 36px; }
 }
 
@@ -2810,14 +2810,14 @@ body.dragging-card { cursor: grabbing; }
   .a2hs-tip { display: none; }
   .footer-note { display: none; }
   .bid-grid button { min-height: 44px; }
-  .circle-wrap { padding: 36px 32px 58px; }
-  .circle-table { --card-in: clamp(48px, 12cqh, 58px); }
-  .circle-table.n-5, .circle-table.n-6 { --card-in: clamp(46px, 12cqh, 54px); }
-  .seat-card .sk-card, .card-slot { width: 44px; }
+  .circle-wrap { padding: 24px 14px 36px; }
+  .circle-table { --card-in: clamp(54px, 13cqh, 64px); }
+  .circle-table.n-5, .circle-table.n-6 { --card-in: clamp(52px, 13cqh, 60px); }
+  .seat-card .sk-card, .card-slot { width: 52px; }
   .circle-table.n-5 .seat-card .sk-card,
   .circle-table.n-6 .seat-card .sk-card,
   .circle-table.n-5 .card-slot,
-  .circle-table.n-6 .card-slot { width: 38px; }
+  .circle-table.n-6 .card-slot { width: 46px; }
 
 }
 
@@ -2872,9 +2872,146 @@ body.dragging-card { cursor: grabbing; }
 .seat-card { isolation: isolate; }
 
 @media (max-height: 800px) and (min-height: 621px) {
-  .circle-wrap { padding: 52px 40px 72px; }
-  .circle-table { --card-in: clamp(52px, 13cqh, 62px); }
-  .circle-table.n-5, .circle-table.n-6 { --card-in: clamp(50px, 12cqh, 58px); }
+  .circle-wrap { padding: 32px 16px 48px; }
+  .circle-table { --card-in: clamp(58px, 14cqh, 70px); }
+  .circle-table.n-5, .circle-table.n-6 { --card-in: clamp(56px, 13cqh, 66px); }
   .table-status-chip, .last-trick-cue { font-size: 12px; padding: 3px 10px; }
   .my-bid-track { margin: 0 0 4px; }
+}
+
+
+/* c26: loading screen, your-turn chip by the hand, preview character bounce */
+.asset-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: calc(24px + var(--safe-top)) 28px calc(24px + var(--safe-bottom));
+  background: #0f2442;
+  color: #fff;
+  text-align: center;
+  transition: opacity 0.22s ease;
+}
+.asset-loader.is-done {
+  opacity: 0;
+  pointer-events: none;
+}
+.asset-loader[hidden] { display: none; }
+.asset-loader-icon {
+  width: 96px;
+  height: 96px;
+  border-radius: 22px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.asset-loader-word {
+  font-family: "Chiron Hei HK", "PingFang HK", sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #fff8e6;
+}
+.asset-loader-bar {
+  width: min(220px, 62vw);
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  overflow: hidden;
+}
+.asset-loader-bar > i {
+  display: block;
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #edbf59, #ffe08a);
+  transition: width 0.12s linear;
+}
+
+.hand-label {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--gold-soft);
+  letter-spacing: 0.02em;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.hand-tray-mid {
+  flex: 1 1 auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-width: 0;
+}
+.hand-tray .follow-suit-hint { margin-left: 0; flex: 0 0 auto; }
+
+.your-turn-hint {
+  animation: your-turn-pulse 1.7s ease-in-out infinite;
+  box-shadow: 0 0 0 1px rgba(237, 191, 89, 0.28);
+}
+@keyframes your-turn-pulse {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(237, 191, 89, 0.28); }
+  50% { box-shadow: 0 0 0 3px rgba(237, 191, 89, 0.82), 0 0 10px rgba(237, 191, 89, 0.4); }
+}
+
+.sk-card-bob-clip {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  -webkit-mask-image: radial-gradient(ellipse 58% 54% at 50% 48%, #000 0 60%, transparent 80%);
+  mask-image: radial-gradient(ellipse 58% 54% at 50% 48%, #000 0 60%, transparent 80%);
+}
+.sk-card-bob {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  pointer-events: none;
+  transform-origin: 50% 58%;
+  animation: card-char-bob 0.55s ease-in-out infinite;
+}
+@keyframes card-char-bob {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  25% { transform: translate(0.7%, -2.2%) rotate(-0.9deg); }
+  50% { transform: translate(0, 0.45%) rotate(0deg); }
+  75% { transform: translate(-0.65%, -1.5%) rotate(0.8deg); }
+}
+.sk-card-vfx {
+  position: absolute;
+  inset: 18% 14% 16%;
+  pointer-events: none;
+  opacity: 0.62;
+  -webkit-mask-image: radial-gradient(ellipse 70% 68% at 50% 50%, #000 30%, transparent 74%);
+  mask-image: radial-gradient(ellipse 70% 68% at 50% 50%, #000 30%, transparent 74%);
+}
+.sk-card-vfx::before,
+.sk-card-vfx::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+}
+.sk-card-vfx::before {
+  background: conic-gradient(from 0deg, transparent 0 38%, rgba(80, 190, 255, 0.05) 44%, rgba(90, 210, 255, 0.7) 50%, rgba(80, 190, 255, 0.05) 56%, transparent 64%);
+  animation: card-vfx-spin 2.4s linear infinite;
+}
+.sk-card-vfx::after {
+  background: conic-gradient(from 180deg, transparent 0 38%, rgba(255, 90, 60, 0.05) 44%, rgba(255, 110, 70, 0.55) 50%, rgba(255, 90, 60, 0.05) 56%, transparent 64%);
+  animation: card-vfx-spin 3.1s linear infinite reverse;
+}
+@keyframes card-vfx-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .your-turn-hint,
+  .sk-card-bob,
+  .sk-card-vfx::before,
+  .sk-card-vfx::after { animation: none; }
+  .sk-card-vfx { display: none; }
 }

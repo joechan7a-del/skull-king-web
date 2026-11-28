@@ -69,6 +69,28 @@ function kindClass(card) {
   return `suit-${card.suit}`;
 }
 
+
+/** Every in-play face, used to preload art when the app opens. */
+export const CARD_ART_FILES = [
+  ...["yellow", "green", "purple"].flatMap((suit) => Array.from({ length: 14 }, (_, i) => `${suit}-${i + 1}`)),
+  ...Array.from({ length: 13 }, (_, i) => `black-${i + 1}`),
+  "black-14",
+  "black-14-1",
+  "escape",
+  "tigress-0",
+  "tigress-1",
+  "skullKing",
+  "mermaid-0",
+  "mermaid-1",
+  "kraken",
+  "whiteWhale",
+  ...Array.from({ length: 5 }, (_, i) => `pirate-${i}`),
+];
+
+export function allCardArtUrls() {
+  return CARD_ART_FILES.map((name) => `/cards/${name}.webp`);
+}
+
 export function cardArtUrl(card) {
   if (!card) return "";
   if (card.special === "escape") return "/cards/escape.webp";
@@ -92,13 +114,14 @@ export function cardFaceLabel(card, { tigressAsPirate = null } = {}) {
   return "";
 }
 
-export function cardFaceHTML(card, { dimmed = false, tigressAsPirate = null, compact = false } = {}) {
+export function cardFaceHTML(card, { dimmed = false, tigressAsPirate = null, compact = false, animated = false } = {}) {
   const cls = [
     "sk-card",
     "has-art",
     kindClass(card),
     dimmed ? "dimmed" : "",
     compact ? "compact" : "",
+    animated ? "is-preview-live" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -108,9 +131,13 @@ export function cardFaceHTML(card, { dimmed = false, tigressAsPirate = null, com
   const declared = card.special === "tigress" && tigressAsPirate != null
     ? `<span class="sk-card-flag">${tigressAsPirate ? "當海盜" : "當逃脫"}</span>`
     : "";
+  const live = animated
+    ? `<div class="sk-card-bob-clip" aria-hidden="true"><img class="sk-card-bob" src="${escapeAttr(src)}" alt="" draggable="false" width="784" height="1100"></div><div class="sk-card-vfx" aria-hidden="true"></div>`
+    : "";
   return `<div class="${cls}" data-id="${escapeAttr(card.id)}" role="img" aria-label="${escapeAttr(label)}">
     <div class="sk-card-inner">
       <img class="sk-card-art" src="${escapeAttr(src)}" alt="${escapeAttr(label)}" draggable="false" width="784" height="1100">
+      ${live}
       ${declared}
     </div>
   </div>`;

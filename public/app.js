@@ -1,4 +1,65 @@
-import { cardFaceHTML, cardBackHTML, iconSVG, escapeHtml, CARD_HELP, SPECIAL_INFO, SUIT_INFO, cardHelpText, suitLabel } from "./cards.js";
+import { cardFaceHTML, cardBackHTML, iconSVG, escapeHtml, CARD_HELP, SPECIAL_INFO, SUIT_INFO, cardHelpText, suitLabel, allCardArtUrls } from "./cards.js";
+
+const assetPreload = startAssetPreload();
+
+function startAssetPreload() {
+  const urls = allCardArtUrls();
+  const total = urls.length;
+  let loaded = 0;
+  let done = false;
+  const listeners = new Set();
+  const state = { loaded: 0, total, done: false, promise: null };
+
+  function tick(ok) {
+    loaded += 1;
+    state.loaded = loaded;
+    const progress = total ? loaded / total : 1;
+    listeners.forEach((fn) => fn(progress, loaded, total));
+    if (loaded >= total && !done) {
+      done = true;
+      state.done = true;
+    }
+  }
+
+  function loadOne(url) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = img.onerror = () => { tick(); resolve(); };
+      img.src = url;
+    });
+  }
+
+  state.promise = Promise.all(urls.map(loadOne));
+  state.onProgress = (fn) => { listeners.add(fn); fn(total ? loaded / total : 1, loaded, total); return () => listeners.delete(fn); };
+  return state;
+}
+
+function bindAssetLoader() {
+  const el = document.getElementById("asset-loader");
+  if (!el) return;
+  const fill = document.getElementById("asset-loader-fill");
+  const hide = () => {
+    if (el.hasAttribute("hidden")) return;
+    el.classList.add("is-done");
+    el.setAttribute("aria-busy", "false");
+    const finish = () => el.setAttribute("hidden", "");
+    el.addEventListener("transitionend", finish, { once: true });
+    setTimeout(finish, 280);
+  };
+  assetPreload.onProgress((progress) => {
+    if (fill) fill.style.width = `${Math.max(4, Math.round(progress * 100))}%`;
+  });
+  const started = performance.now();
+  assetPreload.promise.then(() => {
+    const wait = assetPreload.total && assetPreload.loaded === assetPreload.total && (performance.now() - started) < 80
+      ? 0
+      : Math.max(0, 120 - (performance.now() - started));
+    setTimeout(hide, wait);
+  });
+}
+
+bindAssetLoader();
+
 import { extractJoinCode, normalizeJoinCode, ROOM_CODE_LENGTH } from "./join-code.js";
 import { qrSvg } from "./qr.js";
 
@@ -1021,7 +1082,7 @@ function seatRadii(n) {
   if (n <= 2) return { rx: 0, ry: 36 };
   if (n === 3) return { rx: 36, ry: 37 };
   if (n === 4) return { rx: 36, ry: 38 };
-  if (n === 5) return { rx: 38, ry: 39 };
+  if (n === 5) return { rx: 42, ry: 43 };
   return { rx: 40, ry: 39 };
 }
 
@@ -1084,9 +1145,8 @@ function yourTurnHintHTML(v) {
 function tableCuesRowHTML(v) {
   const last = lastTrickCueHTML(v);
   const mid = midTrickCueHTML(v);
-  const turn = yourTurnHintHTML(v);
-  if (!last && !mid && !turn) return "";
-  return `<div class="table-cues-row">${last}${mid}${turn}</div>`;
+  if (!last && !mid) return "";
+  return `<div class="table-cues-row">${last}${mid}</div>`;
 }
 
 function submitLobbyName() {
@@ -1995,7 +2055,7 @@ function inspectHTML() {
   return `<div class="overlay center" data-act="close-inspect">
     <div class="sheet inspect-sheet inspect-card-sheet" data-stop="1" data-sheet-dismiss="close-inspect">
       ${sheetHandleHTML()}
-      <div class="inspect-card${ins.why ? " illegal-shake" : ""}">${cardFaceHTML(card, { tigressAsPirate: ins.tigressAsPirate })}</div>
+      <div class="inspect-card${ins.why ? " illegal-shake" : ""}">${cardFaceHTML(card, { tigressAsPirate: ins.tigressAsPirate, animated: true })}</div>
       <h2>${escapeHtml(title)}</h2>
       <p>${escapeHtml(help)}</p>
       ${ins.why ? `<p class="why-line">${escapeHtml(ins.why)}</p>` : ""}
@@ -2204,8 +2264,8 @@ function isPlayerThinking(p, v) {
 function tableArrowsSVG() {
   const cx = 50;
   const cy = 50;
-  const rx = 22;
-  const ry = 19.5;
+  const rx = 17;
+  const ry = 15;
   const startDeg = 115;
   const sweepDeg = 302;
   const a0 = (startDeg * Math.PI) / 180;
@@ -2715,6 +2775,8 @@ function renderTable() {
   }
     const handTray = `<div class="hand-tray">
     <div class="hand-label">手牌 ${handCards.length} 張</div>
+    <div class="hand-tray-mid">${yourTurnHintHTML(v)}</div>
+    ${followSuitHintHTML(v)}
   </div>`;
   const hand = `<div class="hand-scroll"><div class="hand${dealing ? " dealing" : ""}">${handCards
     .map((c, i) => {
@@ -2780,7 +2842,7 @@ function renderTable() {
       <div class="table-top-slot">${bidTotalChipHTML(v)}${tableCuesRowHTML(v)}</div>
       ${circleTableHTML(v)}
       <div class="table-dock">
-        <div class="dock-status-row">${followSuitHintHTML(v)}</div>
+        <div class="dock-status-row"></div>
         <div class="error-line">${escapeHtml(state.error)}</div>
         ${bidPanel}
         ${confirmBar}
