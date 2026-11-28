@@ -476,13 +476,12 @@ export class RoomManager {
   }
 
   _uniqueCode() {
-    for (let len = 4; len <= 6; len++) {
-      for (let attempt = 0; attempt < 32; attempt++) {
-        let code = "";
-        const bytes = randomBytes(len);
-        for (let i = 0; i < len; i++) code += CODE_CHARS[bytes[i] % CODE_CHARS.length];
-        if (!this.rooms.has(code)) return code;
-      }
+    const len = 4;
+    for (let attempt = 0; attempt < 256; attempt++) {
+      let code = "";
+      const bytes = randomBytes(len);
+      for (let i = 0; i < len; i++) code += CODE_CHARS[bytes[i] % CODE_CHARS.length];
+      if (!this.rooms.has(code)) return code;
     }
     throw new Error("無法產生房號");
   }

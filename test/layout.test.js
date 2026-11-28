@@ -61,7 +61,7 @@ test("the felt keeps a locked mid-trick proportion on every in-game screen", () 
   assert.match(render, /circleTableHTML\(v\)/);
   const dockChunk = render.slice(render.indexOf("table-dock"), render.indexOf("pendingTigress"));
   assert.doesNotMatch(dockChunk, /circleTableHTML/);
-  assert.match(html, /app\.js\?v=c24/);
+  assert.match(html, /app\.js\?v=c25/);
   // overlays must stay out of the table flex flow
   assert.match(css, /\.confirm-bar\s*\{[^}]*position:\s*absolute/s);
   const banner = block(css, ".banner");
@@ -196,7 +196,7 @@ test("trick and round results are overlay dialogs and do not shrink the table", 
   const score = js.slice(js.indexOf("function scoreHTML"), js.indexOf("function renderRules"));
   assert.match(score, /class="overlay center"/);
   assert.match(score, /下一局/);
-  assert.match(html, /app\.js\?v=c24/);
+  assert.match(html, /app\.js\?v=c25/);
 });
 
 test("AI plays and post-win pauses are modestly longer", () => {
@@ -330,9 +330,9 @@ test("rules copy describes the 74-card house deck", () => {
   assert.doesNotMatch(js, /牌組 72 張：/);
 });
 
-test("cache bust is c24 and the site uses a licensed HK webfont", () => {
-  assert.match(html, /app\.js\?v=c24/);
-  assert.match(html, /styles\.css\?v=c24/);
+test("cache bust is c25 and the site uses a licensed HK webfont", () => {
+  assert.match(html, /app\.js\?v=c25/);
+  assert.match(html, /styles\.css\?v=c25/);
   assert.match(html, /fonts\.googleapis\.com/);
   assert.match(html, /Chiron\+Hei\+HK/);
   assert.match(css, /"Chiron Hei HK"/);

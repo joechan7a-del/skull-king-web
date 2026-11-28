@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "public" / "cards"
@@ -129,6 +129,76 @@ def enlarge_corner_badges(im: Image.Image, special: bool) -> Image.Image:
     return base.convert("RGB")
 
 
+
+COLOR_SUITS = ("yellow-", "green-", "purple-")
+
+
+def bolden_rank_numbers(im: Image.Image) -> Image.Image:
+    """Thicken the painted rank glyphs on colour-suit badges only.
+
+    Leaves the circular frame and any +10/+20 bonus marks alone.
+    """
+    arr = np.array(im.convert("RGB"))
+    h, w = arr.shape[:2]
+    scale = h / 1100.0
+    frame = max(8, int(round(34 * scale)))
+    region = max(80, int(round(280 * scale)))
+    number_h = max(40, int(round(125 * scale)))
+    # 3 / 2 in 784×1100 webp space (the proven prototype); scale up for the 1824×2560 original.
+    black_r = max(2, int(round(3 * scale)))
+    outline_r = max(1, int(round(2 * scale)))
+    out = arr.copy()
+    for corner in ("TL", "BR"):
+        if corner == "TL":
+            x0, y0 = frame, frame
+            x1, y1 = min(w, frame + region), min(h, frame + region)
+        else:
+            x0, y0 = max(0, w - frame - region), max(0, h - frame - region)
+            x1, y1 = w - frame, h - frame
+        roi = arr[y0:y1, x0:x1]
+        lum = roi.mean(axis=2)
+        dark = lum < 42
+        ys, xs = np.where(dark)
+        if len(xs) < 80:
+            continue
+        bw, bh = int(xs.max() - xs.min()), int(ys.max() - ys.min())
+        if bh > bw + max(12, int(16 * scale)):
+            if corner == "TL":
+                ycut = int(ys.min() + max(bw, number_h) + 8 * scale)
+                keep = ys <= ycut
+            else:
+                ycut = int(ys.max() - max(bw, number_h) - 8 * scale)
+                keep = ys >= ycut
+            if int(keep.sum()) >= 80:
+                xs, ys = xs[keep], ys[keep]
+                dark = np.zeros_like(dark)
+                dark[ys, xs] = True
+        cx, cy = float(xs.mean()), float(ys.mean())
+        rad = max(float(np.sqrt((xs - cx) ** 2 + (ys - cy) ** 2).max()) * 1.05, 36 * scale)
+        yy, xx = np.ogrid[0:roi.shape[0], 0:roi.shape[1]]
+        core = dark & (((xx - cx) ** 2 + (yy - cy) ** 2) <= rad ** 2)
+        if int(core.sum()) < 80:
+            continue
+        mask = Image.fromarray((core.astype(np.uint8) * 255), "L")
+        k = black_r * 2 + 1
+        if k % 2 == 0:
+            k += 1
+        dil = np.array(mask.filter(ImageFilter.MaxFilter(k))) > 127
+        ok = outline_r * 2 + 1
+        if ok % 2 == 0:
+            ok += 1
+        ring = np.array(Image.fromarray((dil.astype(np.uint8) * 255), "L").filter(ImageFilter.MaxFilter(ok))) > 127
+        ring = ring & ~dil
+        sub = out[y0:y1, x0:x1]
+        near = np.array(mask.filter(ImageFilter.MaxFilter(max(9, int(9 * scale) | 1)))) > 127
+        light = near & (lum > 190)
+        lc = roi[light].mean(axis=0) if light.any() else np.array([236, 236, 228])
+        darkc = roi[core].mean(axis=0)
+        sub[ring] = lc
+        sub[dil] = darkc
+    return Image.fromarray(out)
+
+
 def compress_one(name: str, number: int) -> tuple[str, int, tuple[int, int]]:
     path = src(number)
     if not path.exists():
@@ -137,6 +207,8 @@ def compress_one(name: str, number: int) -> tuple[str, int, tuple[int, int]]:
         raise RuntimeError(f"refusing to pack unused original {number}")
     im = Image.open(path)
     im = enlarge_corner_badges(im, special=name in SPECIAL_NAMES)
+    if name.startswith(COLOR_SUITS):
+        im = bolden_rank_numbers(im)
     w, h = im.size
     scale = LONG_SIDE / max(w, h)
     if scale < 1:

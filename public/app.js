@@ -1,5 +1,5 @@
 import { cardFaceHTML, cardBackHTML, iconSVG, escapeHtml, CARD_HELP, SPECIAL_INFO, SUIT_INFO, cardHelpText, suitLabel } from "./cards.js";
-import { extractJoinCode, normalizeJoinCode } from "./join-code.js";
+import { extractJoinCode, normalizeJoinCode, ROOM_CODE_LENGTH } from "./join-code.js";
 import { qrSvg } from "./qr.js";
 
 const TOKEN_KEY = "sk_token";
@@ -397,7 +397,7 @@ function roundRailHTML(v) {
 
 function maybeAutoJoin(code) {
   const raw = normalizeJoinCode(code);
-  if (raw.length !== 6) return false;
+  if (raw.length !== ROOM_CODE_LENGTH) return false;
   if (state.autoJoinLock) return false;
   if (state.screen !== "home") return false;
   state.autoJoinLock = true;
@@ -408,13 +408,13 @@ function maybeAutoJoin(code) {
 
 function codeBoxesHTML(prefill) {
   const code = normalizeJoinCode(prefill);
-  const boxes = Array.from({ length: 6 }, (_, i) => {
+  const boxes = Array.from({ length: ROOM_CODE_LENGTH }, (_, i) => {
     const ch = code[i] || "";
     return `<input class="code-box" type="text" inputmode="text" autocapitalize="characters" autocomplete="off" autocorrect="off" maxlength="1" name="sk-room-box-${i}" data-box="${i}" value="${escapeHtml(ch)}" aria-label="房號第 ${i + 1} 個字" spellcheck="false" readonly data-lpignore="true" data-1p-ignore="true" data-form-type="other">`;
   }).join("");
   return `
     <div class="field-label" id="code-boxes-label">房號</div>
-    <input id="code-input" class="code-input-sr" maxlength="6" name="sk-room-join-hidden" value="${escapeHtml(code)}" autocapitalize="characters" autocomplete="off" autocorrect="off" inputmode="text" enterkeyhint="go" spellcheck="false" tabindex="-1" readonly aria-hidden="true" data-lpignore="true" data-1p-ignore="true" data-form-type="other" />
+    <input id="code-input" class="code-input-sr" maxlength="${ROOM_CODE_LENGTH}" name="sk-room-join-hidden" value="${escapeHtml(code)}" autocapitalize="characters" autocomplete="off" autocorrect="off" inputmode="text" enterkeyhint="go" spellcheck="false" tabindex="-1" readonly aria-hidden="true" data-lpignore="true" data-1p-ignore="true" data-form-type="other" />
     <div class="join-row">
       <div class="code-boxes" role="group" aria-labelledby="code-boxes-label">${boxes}</div>
       <button type="button" class="btn btn-ghost" data-act="paste-code">貼上</button>
@@ -466,13 +466,13 @@ function bindCodeBoxes() {
       const typed = normalizeJoinCode(box.value);
       if (typed.length > 1) {
         const prefix = readBoxes().slice(0, i);
-        sync(prefix + typed, { focusIndex: Math.min(5, (prefix + typed).length), joinIfFull: true });
+        sync(prefix + typed, { focusIndex: Math.min(ROOM_CODE_LENGTH - 1, (prefix + typed).length), joinIfFull: true });
         return;
       }
       const chars = boxes.map((b, j) => (j === i ? typed.slice(-1) : (b.value || "")));
       const raw = normalizeJoinCode(chars.join(""));
       box.value = typed.slice(-1);
-      sync(raw, { focusIndex: typed ? Math.min(5, i + 1) : i, joinIfFull: true });
+      sync(raw, { focusIndex: typed ? Math.min(ROOM_CODE_LENGTH - 1, i + 1) : i, joinIfFull: true });
     });
     box.addEventListener("keydown", (e) => {
       if (e.key === "Backspace" && !box.value && i > 0) {
@@ -488,7 +488,7 @@ function bindCodeBoxes() {
         boxes[i - 1].focus();
         boxes[i - 1].select();
         state.codeBoxFocus = i - 1;
-      } else if (e.key === "ArrowRight" && i < 5) {
+      } else if (e.key === "ArrowRight" && i < ROOM_CODE_LENGTH - 1) {
         e.preventDefault();
         unlockBox(boxes[i + 1]);
         boxes[i + 1].focus();
@@ -501,9 +501,9 @@ function bindCodeBoxes() {
       if (!raw) return;
       e.preventDefault();
       const extracted = extractJoinCode(raw);
-      const prefix = extracted.length === 6 ? "" : readBoxes().slice(0, i);
+      const prefix = extracted.length === ROOM_CODE_LENGTH ? "" : readBoxes().slice(0, i);
       const next = normalizeJoinCode(prefix + (extracted || raw));
-      sync(next, { focusIndex: Math.min(5, Math.max(0, next.length - 1)), joinIfFull: true });
+      sync(next, { focusIndex: Math.min(ROOM_CODE_LENGTH - 1, Math.max(0, next.length - 1)), joinIfFull: true });
     });
     box.addEventListener("focus", () => {
       unlockBox(box);
@@ -517,7 +517,7 @@ function bindCodeBoxes() {
 
   if (hidden) {
     hidden.addEventListener("input", () => {
-      sync(hidden.value, { focusIndex: Math.min(5, normalizeJoinCode(hidden.value).length), joinIfFull: true });
+      sync(hidden.value, { focusIndex: Math.min(ROOM_CODE_LENGTH - 1, normalizeJoinCode(hidden.value).length), joinIfFull: true });
     });
     hidden.addEventListener("change", sweepCodeBoxes);
   }
@@ -1545,7 +1545,7 @@ async function pasteCode() {
     }
     state.joinCode = code;
     state.error = "";
-    if (code.length === 6) {
+    if (code.length === ROOM_CODE_LENGTH) {
       maybeAutoJoin(code);
       return;
     }

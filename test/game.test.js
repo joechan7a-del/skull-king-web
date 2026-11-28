@@ -229,7 +229,7 @@ test("createRoom is locked to the 5-player format", () => {
 test("room: two humans join, host starts 2+2 AI, reconnect mid-hand", () => {
   const mgr = new RoomManager();
   const { room, player: host } = mgr.createRoom({ name: "阿明" });
-  assert.equal(room.code.length >= 4, true);
+  assert.equal(room.code.length, 4);
   const joined = mgr.joinRoom({ code: room.code, name: "小芳" });
   assert.equal(joined.player.name, "小芳");
   room.seats = 4;
