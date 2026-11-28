@@ -1580,6 +1580,23 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   font-weight: 600;
 }
 .inspect-sheet .inspect-card { display: flex; justify-content: center; margin: 0 0 12px; }
+/* Match the user's 「大概咁」 size reference: face dominates the cream sheet. */
+.inspect-sheet.inspect-card-sheet { padding: 14px 16px 16px; }
+.inspect-sheet.inspect-card-sheet .inspect-card { margin: 2px 0 10px; }
+.inspect-sheet.inspect-card-sheet .inspect-card .sk-card {
+  width: auto;
+  height: min(58dvh, calc(76vw * 3.5 / 2.4), 440px);
+  max-width: min(300px, 76vw, 100%);
+  aspect-ratio: 2.4 / 3.5;
+  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.28));
+}
+.inspect-play-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+.inspect-play-actions .btn { width: 100%; }
 .legend-list { display: flex; flex-direction: column; gap: 10px; margin: 0 0 16px; }
 .legend-item strong { color: var(--ink); display: block; margin-bottom: 2px; }
 .legend-item p { margin: 0; font-size: 14px; color: var(--ink-soft); }

@@ -208,21 +208,22 @@ test("AI fills seats and can bid + play a whole round", () => {
   assert.equal(g.scores[0].cardsDealt, 6);
 });
 
-test("createRoom defaults to 5 players and the host can still pick 2–6", () => {
+test("createRoom is locked to the 5-player format", () => {
   const mgr = new RoomManager();
   const { room, player: host } = mgr.createRoom({ name: "阿明" });
   assert.equal(room.seats, 5);
-  const three = mgr.createRoom({ name: "阿明", seats: 3 });
-  assert.equal(three.room.seats, 3);
-  const fallback = mgr.createRoom({ name: "阿明", seats: 9 });
-  assert.equal(fallback.room.seats, 5);
-  assert.equal(mgr.setSeats(room, host.id, 2).ok ?? true, true);
-  assert.equal(room.seats, 2);
-  mgr.setSeats(room, host.id, 6);
-  assert.equal(room.seats, 6);
-  const bad = mgr.setSeats(room, host.id, 7);
+  const ignored = mgr.createRoom({ name: "阿明", seats: 3 });
+  assert.equal(ignored.room.seats, 5);
+  const again = mgr.setSeats(room, host.id, 5);
+  assert.equal(again.ok, true);
+  assert.equal(room.seats, 5);
+  const bad = mgr.setSeats(room, host.id, 2);
   assert.ok(bad?.error);
-  assert.equal(room.seats, 6);
+  assert.match(bad.error, /五人/);
+  assert.equal(room.seats, 5);
+  const six = mgr.setSeats(room, host.id, 6);
+  assert.ok(six?.error);
+  assert.equal(room.seats, 5);
 });
 
 test("room: two humans join, host starts 2+2 AI, reconnect mid-hand", () => {
@@ -231,7 +232,7 @@ test("room: two humans join, host starts 2+2 AI, reconnect mid-hand", () => {
   assert.equal(room.code.length >= 4, true);
   const joined = mgr.joinRoom({ code: room.code, name: "小芳" });
   assert.equal(joined.player.name, "小芳");
-  mgr.setSeats(room, host.id, 4);
+  room.seats = 4;
   mgr.setAiFill(room, host.id, true);
   mgr.setReady(room, joined.player.id, true);
   const started = mgr.startGame(room, host.id);
@@ -407,7 +408,7 @@ test("round result waits for all connected humans before advancing", () => {
   const guest = joined.player;
   host.connected = true;
   guest.connected = true;
-  mgr.setSeats(room, host.id, 2);
+  room.seats = 2;
   mgr.setAiFill(room, host.id, false);
   mgr.setReady(room, guest.id, true);
   const started = mgr.startGame(room, host.id);
@@ -696,7 +697,7 @@ test("the winner overlay waits to look at the completed trick, and the winning c
   const guest = mgr.joinRoom({ code: room.code, name: "小芳" }).player;
   host.connected = true;
   guest.connected = true;
-  mgr.setSeats(room, host.id, 2);
+  room.seats = 2;
   mgr.setAiFill(room, host.id, false);
   mgr.setReady(room, guest.id, true);
   assert.equal(mgr.startGame(room, host.id).ok, true);
@@ -746,7 +747,7 @@ test("startGame and playAgain shuffle AI names but keep seat colors for the matc
   const rng = () => seq[i++ % seq.length];
   const mgr = new RoomManager({ rng });
   const { room, player: host } = mgr.createRoom({ name: "阿明" });
-  mgr.setSeats(room, host.id, 3);
+  room.seats = 3;
   mgr.setAiFill(room, host.id, true);
   assert.equal(mgr.startGame(room, host.id).ok, true);
   const first = room.game.players.filter((p) => p.isAI).map((p) => ({ id: p.id, name: p.name, colorIndex: p.colorIndex }));

@@ -40,13 +40,12 @@ export class RoomManager {
     if (this._janitor.unref) this._janitor.unref();
   }
 
-  createRoom({ name, seats } = {}) {
+  createRoom({ name } = {}) {
     const code = this._uniqueCode();
-    const seatCount = Number(seats);
     const room = {
       code,
       hostId: null,
-      seats: Number.isInteger(seatCount) && seatCount >= 2 && seatCount <= 6 ? seatCount : 5,
+      seats: 5,
       aiFill: true,
       humans: [],
       game: null,
@@ -121,11 +120,12 @@ export class RoomManager {
     if (room.game) return { error: "開咗局就不能改人數。" };
     if (room.hostId !== playerId) return { error: "得房主可以改人數。" };
     const n = Number(count);
-    if (!Number.isInteger(n) || n < 2 || n > 6) return { error: "玩家人數要係 2 至 6 人。" };
-    if (n < room.humans.length) return { error: `而家已經有 ${room.humans.length} 個人，不能再減。` };
-    room.seats = n;
-    this.touch(room);
-    return { ok: true };
+    if (n === 5) {
+      room.seats = 5;
+      this.touch(room);
+      return { ok: true };
+    }
+    return { error: "呢個玩法只開五人桌。" };
   }
 
   setAiFill(room, playerId, enabled) {

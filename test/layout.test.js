@@ -61,7 +61,7 @@ test("the felt keeps a locked mid-trick proportion on every in-game screen", () 
   assert.match(render, /circleTableHTML\(v\)/);
   const dockChunk = render.slice(render.indexOf("table-dock"), render.indexOf("pendingTigress"));
   assert.doesNotMatch(dockChunk, /circleTableHTML/);
-  assert.match(html, /app\.js\?v=c23/);
+  assert.match(html, /app\.js\?v=c24/);
   // overlays must stay out of the table flex flow
   assert.match(css, /\.confirm-bar\s*\{[^}]*position:\s*absolute/s);
   const banner = block(css, ".banner");
@@ -196,7 +196,7 @@ test("trick and round results are overlay dialogs and do not shrink the table", 
   const score = js.slice(js.indexOf("function scoreHTML"), js.indexOf("function renderRules"));
   assert.match(score, /class="overlay center"/);
   assert.match(score, /下一局/);
-  assert.match(html, /app\.js\?v=c23/);
+  assert.match(html, /app\.js\?v=c24/);
 });
 
 test("AI plays and post-win pauses are modestly longer", () => {
@@ -330,9 +330,9 @@ test("rules copy describes the 74-card house deck", () => {
   assert.doesNotMatch(js, /牌組 72 張：/);
 });
 
-test("cache bust is c23 and the site uses a licensed HK webfont", () => {
-  assert.match(html, /app\.js\?v=c23/);
-  assert.match(html, /styles\.css\?v=c23/);
+test("cache bust is c24 and the site uses a licensed HK webfont", () => {
+  assert.match(html, /app\.js\?v=c24/);
+  assert.match(html, /styles\.css\?v=c24/);
   assert.match(html, /fonts\.googleapis\.com/);
   assert.match(html, /Chiron\+Hei\+HK/);
   assert.match(css, /"Chiron Hei HK"/);
@@ -340,16 +340,15 @@ test("cache bust is c23 and the site uses a licensed HK webfont", () => {
   assert.match(css, /"Noto Sans TC"/);
 });
 
-test("home and lobby surface a 2–6 player count picker, default 5", () => {
+test("the format is locked to five players with no seat picker", () => {
   const home = js.slice(js.indexOf("function renderHome"), js.indexOf("function renderLobby"));
-  assert.match(home, /玩家人數（2–6）/);
-  assert.match(home, /預設 5 人/);
-  assert.match(home, /data-act="set-seats"/);
-  assert.match(home, /state\.wantedSeats/);
+  assert.doesNotMatch(home, /data-act="set-seats"/);
+  assert.doesNotMatch(home, /2–6/);
   const lobby = js.slice(js.indexOf("function renderLobby"), js.indexOf("\nfunction signed"));
-  assert.match(lobby, /玩家人數（2–6 人）/);
-  assert.match(lobby, /data-act="set-seats"/);
-  assert.match(lobby, /得房主可以改/);
+  assert.match(lobby, /呢個玩法只開五人桌/);
+  assert.match(lobby, /五人玩法/);
+  assert.doesNotMatch(lobby, /data-act="set-seats"/);
+  assert.doesNotMatch(lobby, /2–6/);
 });
 
 test("夠分 seats get a green made frame, not when busted, and 0/0 counts", () => {
@@ -396,3 +395,27 @@ test("match-start opening draw overlay exists and does not shrink the table", ()
   const wrap = block(css, ".circle-wrap");
   assert.match(wrap, /--dock-reserve/);
 });
+
+test("a single tap on a hand card opens the large preview, not a long-press", () => {
+  const table = js.slice(js.indexOf("function renderTable"), js.indexOf("function handOverlap"));
+  assert.match(table, /playable/);
+  assert.match(table, /data-act="inspect"/);
+  assert.doesNotMatch(table, /data-act="select-card"/);
+  assert.doesNotMatch(js, /function bindCardLongPress/);
+  assert.match(js, /function openInspect/);
+  assert.match(js, /function inspectPlayButtonsHTML/);
+  assert.match(js, /confirm-inspect-play/);
+  assert.match(css, /inspect-card-sheet/);
+  const card = block(css, ".inspect-sheet.inspect-card-sheet .inspect-card .sk-card");
+  assert.match(card, /76vw|58dvh|440px/);
+  assert.match(card, /aspect-ratio:\s*2\.4 \/ 3\.5/);
+});
+
+test("知道喇 is gone from the playing UI", () => {
+  assert.doesNotMatch(js, /知道喇/);
+  assert.doesNotMatch(js, /知道啦/);
+  const inspectFn = js.slice(js.indexOf("function inspectHTML"), js.indexOf("function renderHome"));
+  assert.match(inspectFn, /取消/);
+  assert.doesNotMatch(inspectFn, /知道喇/);
+});
+

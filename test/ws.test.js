@@ -96,9 +96,6 @@ test("two browsers can open a room, bid together, and play a legal trick", async
   guest.send({ type: "ready", ready: true });
   await guestReady;
 
-  const seats = host.wait((m) => m.type === "state" && m.seats === 2);
-  host.send({ type: "setSeats", count: 2 });
-  await seats;
   const fill = host.wait((m) => m.type === "state" && m.aiFill === false);
   host.send({ type: "setAiFill", enabled: false });
   await fill;

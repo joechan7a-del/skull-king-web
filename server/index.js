@@ -71,7 +71,7 @@ function handle(ws, msg) {
   const type = msg?.type;
   if (type === "createRoom") {
     detach(ws);
-    const { room, player } = rooms.createRoom({ name: msg.name, seats: msg.seats });
+    const { room, player } = rooms.createRoom({ name: msg.name });
     attach(ws, room, player);
     rooms.send(ws, { type: "welcome", token: player.token, playerId: player.id, code: room.code });
     rooms.broadcast(room);

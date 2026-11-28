@@ -79,7 +79,6 @@ const state = {
   winBuzzKey: "",
   trickLogPeek: false,
   handCollapsed: false,
-  wantedSeats: 5,
   openingDrawKey: "",
   openingDrawLanded: false,
   openingDrawSpinName: "",
@@ -1609,46 +1608,6 @@ function showCodeHTML(code) {
     "</div></div>";
 }
 
-function bindCardLongPress() {
-  app.querySelectorAll(".sk-wrap .sk-play, .seat-card[data-act='inspect']").forEach((btn) => {
-    let timer = 0;
-    const clear = () => { if (timer) { clearTimeout(timer); timer = 0; } };
-    btn.addEventListener("pointerdown", (e) => {
-      if (e.pointerType === "mouse" && e.button !== 0) return;
-      state.longPressFired = false;
-      const id = btn.dataset.id;
-      if (!id) return;
-      const why = btn.dataset.why || "";
-      const x0 = e.clientX, y0 = e.clientY;
-      const move = (ev) => {
-        if (Math.hypot(ev.clientX - x0, ev.clientY - y0) > 8) clear();
-      };
-      const stop = () => {
-        clear();
-        btn.removeEventListener("pointermove", move);
-        btn.removeEventListener("pointerup", stop);
-        btn.removeEventListener("pointercancel", stop);
-      };
-      btn.addEventListener("pointermove", move);
-      btn.addEventListener("pointerup", stop);
-      btn.addEventListener("pointercancel", stop);
-      timer = window.setTimeout(() => {
-        timer = 0;
-        state.longPressFired = true;
-        haptic(10);
-        openInspect(id, why);
-      }, 420);
-    });
-    btn.addEventListener("click", (e) => {
-      if (state.longPressFired) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        state.longPressFired = false;
-      }
-    }, true);
-  });
-}
-
 function scrollPlayableIntoView() {
   const v = state.view;
   if (state.screen !== "play" || !v || !v.isMyTurn || v.phase !== "playing") return;
@@ -1659,20 +1618,12 @@ function scrollPlayableIntoView() {
   if (el) el.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
 }
 
-function clampSeats(n) {
-  const v = Number(n);
-  if (!Number.isInteger(v)) return 5;
-  return Math.min(6, Math.max(2, v));
-}
-
 function createRoom() {
   const name = state.name.trim();
   if (name) localStorage.setItem(NAME_KEY, name);
-  const seats = clampSeats(state.wantedSeats);
-  state.wantedSeats = seats;
   connect({
     onOpen() {
-      send({ type: "createRoom", name, seats });
+      send({ type: "createRoom", name });
     },
   });
 }
@@ -1749,7 +1700,7 @@ app.addEventListener("click", (e) => {
     }
     return;
   }
-  // Only ignore backdrop taps that land inside the sheet; 知道喇 itself must still close.
+  // Only ignore backdrop taps that land inside the sheet; 取消 itself must still close.
   if (t.classList.contains("overlay") && e.target.closest("[data-stop]")) return;
   const act = t.dataset.act;
   const view = state.view;
@@ -1788,18 +1739,6 @@ app.addEventListener("click", (e) => {
   else if (act === "set-name") { submitLobbyName(); return; }
   else if (act === "copy-code") copyText(state.code);
   else if (act === "copy-link") copyText(shareUrl(state.code));
-  else if (act === "seats-inc" || act === "seats-dec" || act === "set-seats") {
-    const delta = act === "seats-inc" ? 1 : act === "seats-dec" ? -1 : 0;
-    const next = act === "set-seats"
-      ? clampSeats(t.dataset.n)
-      : clampSeats((state.screen === "home" ? (state.wantedSeats || 5) : (view?.seats || 5)) + delta);
-    if (state.screen === "home") {
-      state.wantedSeats = next;
-      render();
-      return;
-    }
-    send({ type: "setSeats", count: next });
-  }
   else if (act === "ai-fill") send({ type: "setAiFill", enabled: t.dataset.on !== "1" });
   else if (act === "ready") send({ type: "ready", ready: t.dataset.on !== "1" });
   else if (act === "start") send({ type: "startGame" });
@@ -1866,17 +1805,25 @@ app.addEventListener("click", (e) => {
     render();
     return;
   }
+  else if (act === "confirm-inspect-play") {
+    const id = t.dataset.id || state.inspect?.card?.id;
+    if (!id || openingDrawActive(view)) return;
+    state.selectedCardId = id;
+    state.inspect = null;
+    confirmSelectedPlay();
+    return;
+  }
   else if (act === "confirm-tig-pirate") {
-    if (!state.selectedCardId) return;
-    const id = state.selectedCardId;
+    const id = t.dataset.id || state.selectedCardId;
+    if (!id) return;
     state.selectedCardId = null;
     state.inspect = null;
     haptic(18);
     send({ type: "play", cardId: id, tigressAsPirate: true });
   }
   else if (act === "confirm-tig-escape") {
-    if (!state.selectedCardId) return;
-    const id = state.selectedCardId;
+    const id = t.dataset.id || state.selectedCardId;
+    if (!id) return;
     state.selectedCardId = null;
     state.inspect = null;
     haptic(18);
@@ -2007,6 +1954,19 @@ function bidHint(cardsDealt, value) {
   return `叫 ${value} 回合：估中加 ${20 * value} 分；估錯就差幾回合，每差 1 回合扣 10 分。`;
 }
 
+
+function inspectPlayButtonsHTML(ins, card) {
+  if (!ins?.canPlay || !card) return "";
+  if (openingDrawActive(state.view)) return "";
+  if (card.special === "tigress") {
+    return `<div class="inspect-play-actions">
+      <button type="button" class="btn btn-gold" data-act="confirm-tig-pirate" data-id="${escapeHtml(card.id)}">確定當海盜出</button>
+      <button type="button" class="btn btn-ink" data-act="confirm-tig-escape" data-id="${escapeHtml(card.id)}">確定當逃脫出</button>
+    </div>`;
+  }
+  return `<button type="button" class="btn btn-gold" data-act="confirm-inspect-play" data-id="${escapeHtml(card.id)}">出呢張</button><div style="height:10px"></div>`;
+}
+
 function inspectHTML() {
   const ins = state.inspect;
   if (!ins) return "";
@@ -2023,7 +1983,7 @@ function inspectHTML() {
         <h2>特殊牌係咩？</h2>
         <p>特殊牌隨時可以出，唔使跟花。撳手牌右上角嘅「？」可以隨時再睇。</p>
         <div class="legend-list">${items}</div>
-        <button class="btn btn-sheet" data-act="close-inspect">知道喇</button>
+        <button class="btn btn-sheet" data-act="close-inspect">取消</button>
       </div>
     </div>`;
   }
@@ -2033,14 +1993,14 @@ function inspectHTML() {
     ? (SPECIAL_INFO[card.special]?.chineseName || "")
     : `${SUIT_INFO[card.suit]?.chineseName || ""} ${card.rank}`;
   return `<div class="overlay center" data-act="close-inspect">
-    <div class="sheet inspect-sheet" data-stop="1" data-sheet-dismiss="close-inspect">
+    <div class="sheet inspect-sheet inspect-card-sheet" data-stop="1" data-sheet-dismiss="close-inspect">
       ${sheetHandleHTML()}
       <div class="inspect-card${ins.why ? " illegal-shake" : ""}">${cardFaceHTML(card, { tigressAsPirate: ins.tigressAsPirate })}</div>
       <h2>${escapeHtml(title)}</h2>
       <p>${escapeHtml(help)}</p>
       ${ins.why ? `<p class="why-line">${escapeHtml(ins.why)}</p>` : ""}
-      ${ins.canPlay ? `<button class="btn btn-gold" data-act="select-card" data-id="${escapeHtml(card.id)}">出呢張</button><div style="height:10px"></div>` : ""}
-      <button class="btn btn-sheet" data-act="close-inspect">知道喇</button>
+      ${inspectPlayButtonsHTML(ins, card)}
+      <button class="btn btn-sheet" data-act="close-inspect">取消</button>
     </div>
   </div>`;
 }
@@ -2070,14 +2030,6 @@ function renderHome() {
       <div class="home-card">
         <label class="field-label" for="name-input">你嘅名</label>
         <input id="name-input" maxlength="12" placeholder="你（唔填就叫「你」）" value="${escapeHtml(state.name)}" autocomplete="nickname" />
-        <div class="home-gap"></div>
-        <div class="seat-pick home-seat-pick">
-          <div class="field-label" id="home-seats-label">玩家人數（2–6）</div>
-          <p class="seat-pick-hint">預設 5 人。開房之後仍然可以改。</p>
-          <div class="seat-picks" role="group" aria-labelledby="home-seats-label">
-            ${[2, 3, 4, 5, 6].map((n) => `<button type="button" class="seat-pick-btn${(state.wantedSeats || 5) === n ? " on" : ""}" data-act="set-seats" data-n="${n}" aria-pressed="${(state.wantedSeats || 5) === n}">${n} 人</button>`).join("")}
-          </div>
-        </div>
         <div class="home-gap"></div>
         <button class="btn btn-gold" data-act="create">開房</button>
         <div class="or-row">或者加入</div>
@@ -2154,12 +2106,10 @@ function renderLobby() {
       </div>
       <div class="lobby-scroll">
       ${host ? `
-        <div class="panel seat-pick-panel">
-          <h3>玩家人數（2–6 人）</h3>
-          <p class="seat-pick-hint">預設 5 人。可以自己揀幾個人玩，再用電腦補滿空位。</p>
-          <div class="seat-picks" role="group" aria-label="玩家人數">
-            ${[2, 3, 4, 5, 6].map((n) => `<button type="button" class="seat-pick-btn${v.seats === n ? " on" : ""}" data-act="set-seats" data-n="${n}" aria-pressed="${v.seats === n}">${n} 人</button>`).join("")}
-          </div>
+        <div class="panel">
+          <h3>玩家人數</h3>
+          <p class="seat-pick-hint">呢個玩法只開五人桌。空位可以用電腦補滿。</p>
+          <div class="seat-row"><span>五人玩法</span><strong>5 人</strong></div>
           <div style="height:12px"></div>
           <div class="toggle-row">
             <span>用電腦補滿空位</span>
@@ -2169,12 +2119,10 @@ function renderLobby() {
           </div>
         </div>
       ` : `
-        <div class="panel seat-pick-panel">
+        <div class="panel">
           <h3>玩家人數</h3>
-          <p class="seat-pick-hint">房主已揀 ${v.seats} 人桌（2–6 人）。得房主可以改。</p>
-          <div class="seat-picks is-locked" role="group" aria-label="玩家人數">
-            ${[2, 3, 4, 5, 6].map((n) => `<button type="button" class="seat-pick-btn${v.seats === n ? " on" : ""}" disabled aria-pressed="${v.seats === n}">${n} 人</button>`).join("")}
-          </div>
+          <p class="seat-pick-hint">呢個玩法只開五人桌。得房主可以決定用唔用電腦補位。</p>
+          <div class="seat-row"><span>五人玩法</span><strong>5 人</strong></div>
           <div style="height:8px"></div>
           <div class="toggle-row"><span>電腦補位</span><strong>${v.aiFill ? "開" : "關"}</strong></div>
         </div>
@@ -2622,7 +2570,7 @@ function prevTrickSheetHTML(v) {
       <p>${escapeHtml(result)}</p>
       ${details}
       <div class="prev-plays">${plays}</div>
-      <button class="btn btn-sheet" data-act="close-prev-trick">知道喇</button>
+      <button class="btn btn-sheet" data-act="close-prev-trick">取消</button>
     </div>
   </div>`;
 }
@@ -2651,6 +2599,7 @@ function podiumHTML(v) {
 }
 
 function confirmBarHTML(v) {
+  if (state.inspect) return "";
   if (!v.isMyTurn || v.phase !== "playing" || !state.selectedCardId) return "";
   const card = (v.myHand || []).find((c) => c.id === state.selectedCardId);
   if (!card) return "";
@@ -2788,7 +2737,7 @@ function renderTable() {
       const shaking = !isLegal && state.shakeCardId === c.id ? " illegal-shake" : "";
       if (isLegal) {
         return `<div class="sk-wrap${selected ? " selected" : ""} playable${dealCls}" ${style}>
-          <button class="sk-play" data-act="select-card" data-id="${escapeHtml(c.id)}">${inner.replace("sk-card ", `sk-card legal ${selected ? "picked " : ""}`)}</button>
+          <button class="sk-play" data-act="inspect" data-id="${escapeHtml(c.id)}">${inner.replace("sk-card ", `sk-card legal ${selected ? "picked " : ""}`)}</button>
           ${tag}
         </div>`;
       }
@@ -3003,7 +2952,6 @@ function render() {
     app.querySelector(".screen")?.classList.add("screen-in");
   }
   if (screen === "play") applyFlyAnim(state.view);
-  bindCardLongPress();
   bindCardDrag();
   bindCodeBoxes();
   bindSheetSwipe();
