@@ -61,7 +61,7 @@ test("the felt keeps a locked mid-trick proportion on every in-game screen", () 
   assert.match(render, /circleTableHTML\(v\)/);
   const dockChunk = render.slice(render.indexOf("table-dock"), render.indexOf("pendingTigress"));
   assert.doesNotMatch(dockChunk, /circleTableHTML/);
-  assert.match(html, /app\.js\?v=c22/);
+  assert.match(html, /app\.js\?v=c23/);
   // overlays must stay out of the table flex flow
   assert.match(css, /\.confirm-bar\s*\{[^}]*position:\s*absolute/s);
   const banner = block(css, ".banner");
@@ -123,9 +123,11 @@ test("played cards stay on the rim and cues stay off the felt", () => {
 });
 
 test("the bulky follow-suit banner is gone; a corner hint and led-suit tint remain", () => {
-  assert.doesNotMatch(js, /輪到你出牌/);
   assert.doesNotMatch(js, /turn-banner mine/);
   assert.doesNotMatch(js, /turn-banner wait/);
+  assert.match(js, /function yourTurnHintHTML/);
+  assert.match(js, /your-turn-hint/);
+  assert.match(js, /輪到你出牌/);
   assert.match(js, /function ledSuitActive/);
   assert.match(js, /function followSuitHintHTML/);
   assert.match(js, /呢個回合要跟黑色（骷髏旗）/);
@@ -194,7 +196,7 @@ test("trick and round results are overlay dialogs and do not shrink the table", 
   const score = js.slice(js.indexOf("function scoreHTML"), js.indexOf("function renderRules"));
   assert.match(score, /class="overlay center"/);
   assert.match(score, /下一局/);
-  assert.match(html, /app\.js\?v=c22/);
+  assert.match(html, /app\.js\?v=c23/);
 });
 
 test("AI plays and post-win pauses are modestly longer", () => {
@@ -328,3 +330,69 @@ test("rules copy describes the 74-card house deck", () => {
   assert.doesNotMatch(js, /牌組 72 張：/);
 });
 
+test("cache bust is c23 and the site uses a licensed HK webfont", () => {
+  assert.match(html, /app\.js\?v=c23/);
+  assert.match(html, /styles\.css\?v=c23/);
+  assert.match(html, /fonts\.googleapis\.com/);
+  assert.match(html, /Chiron\+Hei\+HK/);
+  assert.match(css, /"Chiron Hei HK"/);
+  assert.match(css, /"PingFang HK"/);
+  assert.match(css, /"Noto Sans TC"/);
+});
+
+test("home and lobby surface a 2–6 player count picker, default 5", () => {
+  const home = js.slice(js.indexOf("function renderHome"), js.indexOf("function renderLobby"));
+  assert.match(home, /玩家人數（2–6）/);
+  assert.match(home, /預設 5 人/);
+  assert.match(home, /data-act="set-seats"/);
+  assert.match(home, /state\.wantedSeats/);
+  const lobby = js.slice(js.indexOf("function renderLobby"), js.indexOf("\nfunction signed"));
+  assert.match(lobby, /玩家人數（2–6 人）/);
+  assert.match(lobby, /data-act="set-seats"/);
+  assert.match(lobby, /得房主可以改/);
+});
+
+test("夠分 seats get a green made frame, not when busted, and 0/0 counts", () => {
+  assert.match(js, /const busted = p\.tricksWon > p\.bid;/);
+  assert.match(js, /const made = !busted && p\.tricksWon === p\.bid;/);
+  assert.match(js, /seat-bidline\$\{busted \? " busted" : made \? " made" : ""\}/);
+  assert.match(css, /\.seat-bidline\.made/);
+  assert.match(css, /#4ad88a/);
+  assert.doesNotMatch(js, /made && busted/);
+});
+
+test("the current winning card is highlighted and 而家最大 stays", () => {
+  assert.match(js, /而家最大：/);
+  assert.match(js, /function midTrickCueHTML/);
+  assert.match(js, /leading-now/);
+  assert.match(css, /\.seat-card\.leading-now/);
+  const lead = css.slice(css.indexOf(".seat-card.leading-now .sk-card"), css.indexOf(".seat-card.leading-now .sk-card") + 280);
+  assert.doesNotMatch(lead, /scale\(/);
+  assert.match(lead, /box-shadow/);
+});
+
+test("removed mid-trick chrome is gone from the playing surface, except 而家最大", () => {
+  const table = js.slice(js.indexOf("function renderTable"), js.indexOf("function handOverlap"));
+  assert.doesNotMatch(table, /prevTrickButtonHTML/);
+  assert.doesNotMatch(table, /playWaitHTML/);
+  assert.doesNotMatch(table, /myBidTrackHTML/);
+  assert.doesNotMatch(table, /上一回合/);
+  assert.doesNotMatch(table, /呢局各回合/);
+  assert.doesNotMatch(table, /收起手牌/);
+  assert.doesNotMatch(table, /已經夠回合/);
+  assert.doesNotMatch(table, /仲等：/);
+  assert.match(js, /而家最大：/);
+  assert.match(table, /tableCuesRowHTML/);
+});
+
+test("match-start opening draw overlay exists and does not shrink the table", () => {
+  assert.match(js, /function openingDrawHTML/);
+  assert.match(js, /抽邊個出先/);
+  assert.match(js, /prefers-reduced-motion/);
+  assert.match(css, /\.opening-draw-overlay/);
+  const ov = block(css, ".opening-draw-overlay");
+  assert.match(ov, /position:\s*absolute/);
+  assert.match(ov, /inset:\s*0/);
+  const wrap = block(css, ".circle-wrap");
+  assert.match(wrap, /--dock-reserve/);
+});

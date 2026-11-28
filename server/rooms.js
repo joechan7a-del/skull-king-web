@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { Game, PHASE } from "./game.js";
+
 import { pickAINames } from "./ai.js";
 
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -7,6 +8,8 @@ const ROOM_TTL_MS = 3 * 60 * 60 * 1000;
 const EMPTY_TTL_MS = 20 * 60 * 1000;
 const TRICK_PAUSE_MS = 4000; // time to read the explanation after it appears; do not shorten
 const AI_PAUSE_MS = 1200; // plays only (bids stay immediate); easier to follow, not sluggish
+/** Time for the match-start “who leads first” draw before an AI may play. */
+export const OPENING_DRAW_MS = 2200;
 /** Look-at-the-completed-trick beat before the winner/void overlay. Mid of the requested 1.5–2s. */
 export const TRICK_REVIEW_MS = 1800;
 /** Matches the client flourish banner length in public/app.js (maybeSpecialFlourish). */
@@ -37,12 +40,13 @@ export class RoomManager {
     if (this._janitor.unref) this._janitor.unref();
   }
 
-  createRoom({ name }) {
+  createRoom({ name, seats } = {}) {
     const code = this._uniqueCode();
+    const seatCount = Number(seats);
     const room = {
       code,
       hostId: null,
-      seats: 5,
+      seats: Number.isInteger(seatCount) && seatCount >= 2 && seatCount <= 6 ? seatCount : 5,
       aiFill: true,
       humans: [],
       game: null,
@@ -186,7 +190,7 @@ export class RoomManager {
     }
     if (seats.length < 2) return { error: "至少要兩個人先開得（可以加電腦補位）。" };
     if (seats.length > 6) return { error: "最多六個人。" };
-    room.game = new Game(seats);
+    room.game = new Game(seats, { rng: this.rng });
     room.game.start();
     room.continuing = new Set();
     this.touch(room);
@@ -334,6 +338,8 @@ export class RoomManager {
     if (game.phase === PHASE.PLAYING) {
       const current = game.players[game.currentPlayerIndex];
       if (current?.isAI) {
+        const opening = game.round === 1 && game.tricksPlayed === 0 && !(game.trick || []).length;
+        const delay = opening ? OPENING_DRAW_MS + AI_PAUSE_MS : AI_PAUSE_MS;
         room.timer = setTimeout(() => {
           if (!room.game || room.game.phase !== PHASE.PLAYING) return;
           const prev = room.game.phase;
@@ -341,7 +347,7 @@ export class RoomManager {
           this._syncTrickExplanation(room, prev);
           this.broadcast(room);
           this.schedule(room);
-        }, AI_PAUSE_MS);
+        }, delay);
       }
     }
   }

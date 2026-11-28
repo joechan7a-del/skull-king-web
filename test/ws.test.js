@@ -131,18 +131,21 @@ test("two browsers can open a room, bid together, and play a legal trick", async
   await guestPlaying;
   assert.equal(host.latest.bidsRevealed, true);
 
-  // Guest sits to the dealer's left and leads.
-  assert.equal(guest.latest.isMyTurn, true);
+  // Match-start lead is a random draw; later 局 stay official. Play whoever is on turn.
+  const leader = guest.latest.isMyTurn ? guest : host;
+  const follower = guest.latest.isMyTurn ? host : guest;
+  assert.equal(leader.latest.isMyTurn, true);
+  assert.equal(follower.latest.isMyTurn, false);
   const afterLeadH = host.wait((m) => m.type === "state");
   const afterLeadG = guest.wait((m) => m.type === "state");
-  playCard(guest);
+  playCard(leader);
   await afterLeadH;
   await afterLeadG;
-  assert.equal(host.latest.isMyTurn, true);
+  assert.equal(follower.latest.isMyTurn, true);
 
   const afterFollowH = host.wait((m) => m.type === "state" && (m.phase === "trickResult" || m.phase === "roundResult"));
   const afterFollowG = guest.wait((m) => m.type === "state" && (m.phase === "trickResult" || m.phase === "roundResult"));
-  playCard(host);
+  playCard(follower);
   await afterFollowH;
   await afterFollowG;
   assert.ok(["trickResult", "roundResult"].includes(host.latest.phase));

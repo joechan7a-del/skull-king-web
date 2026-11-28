@@ -29,8 +29,16 @@ export function cardsDealtForRound(round) {
   return round + 5;
 }
 
+/** Pick who leads the first trick of a new match. Later 局 use official rotation. */
+export function pickOpeningLeaderIndex(count, rng = Math.random) {
+  const n = Math.max(1, Number(count) || 1);
+  const r = typeof rng === "function" ? rng() : Math.random();
+  return Math.min(n - 1, Math.max(0, Math.floor(r * n)));
+}
+
 export class Game {
-  constructor(seats) {
+  constructor(seats, { rng } = {}) {
+    this.rng = typeof rng === "function" ? rng : Math.random;
     this.players = seats.map((s, i) => ({
       id: s.id,
       name: s.name,
@@ -47,6 +55,7 @@ export class Game {
     this.round = 1;
     this.dealerIndex = 0;
     this.currentPlayerIndex = 0;
+    this.openingLeaderIndex = 0;
     this.trick = [];
     this.lastTrick = [];
     this.lastWinnerIndex = null;
@@ -105,6 +114,7 @@ export class Game {
   start() {
     this.round = 1;
     this.dealerIndex = 0;
+    this.openingLeaderIndex = pickOpeningLeaderIndex(this.players.length, this.rng);
     for (const p of this.players) p.score = 0;
     this.scores = [];
     this.startRound();
@@ -118,12 +128,15 @@ export class Game {
 
   _maybeRevealBids() {
     if (this.players.some((p) => p.bid == null)) return false;
-    this.currentPlayerIndex = (this.dealerIndex + 1) % this.players.length;
+    const opening = this.round === 1 && this.tricksPlayed === 0;
+    this.currentPlayerIndex = opening
+      ? this.openingLeaderIndex
+      : (this.dealerIndex + 1) % this.players.length;
     this.phase = PHASE.PLAYING;
     const leader = this.players[this.currentPlayerIndex];
-    this.statusMessage = leader.isAI
-      ? `由${leader.name}先出第一回合。`
-      : this._isSelfLeadMessage(leader);
+    this.statusMessage = opening
+      ? `今場由${leader.name}先出。`
+      : (leader.isAI ? `由${leader.name}先出第一回合。` : this._isSelfLeadMessage(leader));
     this.revision++;
     return true;
   }
@@ -447,6 +460,9 @@ export class Game {
       tricksTotal: this.cardsDealt,
       dealerIndex: this.dealerIndex,
       currentPlayerIndex: this.currentPlayerIndex,
+      openingLead: this.phase === PHASE.PLAYING && this.round === 1 && this.tricksPlayed === 0 && this.trick.length === 0,
+      openingLeaderIndex: this.openingLeaderIndex,
+      openingLeaderName: this.players[this.openingLeaderIndex]?.name || "",
       statusMessage: this.statusMessage,
       revision: this.revision,
       bidsRevealed: revealed,

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Game, PHASE } from "../server/game.js";
+import { Game, PHASE, pickOpeningLeaderIndex } from "../server/game.js";
 import { scoreRound, winnerIndex, playedCard, makeSuit, makeSpecial } from "../server/rules.js";
 import { RoomManager, playHasFlourish, trickReviewDelayMs, TRICK_REVIEW_MS, FLOURISH_HOLD_MS, TRICK_PAUSE_MS } from "../server/rooms.js";
 import { AI_NAMES, pickAINames } from "../server/ai.js";
@@ -40,7 +40,8 @@ test("bids stay hidden until everyone has bid, then reveal together", () => {
   assert.equal(g.bidsRevealed, true);
   const v2 = g.viewFor("h0");
   assert.equal(v2.players[1].bid, 1);
-  assert.equal(g.currentPlayerIndex, 1); // left of dealer 0
+  assert.equal(g.currentPlayerIndex, g.openingLeaderIndex);
+  assert.equal(v2.openingLead, true);
 });
 
 test("illegal bid and illegal play are rejected; other hands stay private", () => {
@@ -211,6 +212,10 @@ test("createRoom defaults to 5 players and the host can still pick 2–6", () =>
   const mgr = new RoomManager();
   const { room, player: host } = mgr.createRoom({ name: "阿明" });
   assert.equal(room.seats, 5);
+  const three = mgr.createRoom({ name: "阿明", seats: 3 });
+  assert.equal(three.room.seats, 3);
+  const fallback = mgr.createRoom({ name: "阿明", seats: 9 });
+  assert.equal(fallback.room.seats, 5);
   assert.equal(mgr.setSeats(room, host.id, 2).ok ?? true, true);
   assert.equal(room.seats, 2);
   mgr.setSeats(room, host.id, 6);
@@ -786,3 +791,47 @@ test("startGame and playAgain shuffle AI names but keep seat colors for the matc
   // Names are redrawn for the new match; a different shuffle should not stick to the first pair forever.
   assert.equal(new Set(again.map((p) => p.name)).size, 2);
 });
+
+test("pickOpeningLeaderIndex is deterministic with a stubbed rng", () => {
+  assert.equal(pickOpeningLeaderIndex(5, () => 0), 0);
+  assert.equal(pickOpeningLeaderIndex(5, () => 0.999), 4);
+  assert.equal(pickOpeningLeaderIndex(6, () => 0.5), 3);
+  assert.equal(pickOpeningLeaderIndex(2, () => 0.49), 0);
+  assert.equal(pickOpeningLeaderIndex(2, () => 0.5), 1);
+});
+
+test("opening leader comes from rng only on the first trick of the match", () => {
+  const g = new Game(seats(3, 0), { rng: () => 0 });
+  g.start();
+  assert.equal(g.openingLeaderIndex, 0);
+  for (const p of g.players) g.submitBid(p.id, 0);
+  assert.equal(g.phase, PHASE.PLAYING);
+  assert.equal(g.currentPlayerIndex, 0);
+  assert.equal(g.viewFor("h0").openingLead, true);
+  assert.equal(g.viewFor("h0").openingLeaderName, g.players[0].name);
+
+  for (const p of g.players) {
+    p.hand = [];
+    p.tricksWon = 0;
+    p.potentialBonus = 0;
+  }
+  g.phase = PHASE.TRICK_RESULT;
+  g.lastWinnerIndex = 2;
+  g.advanceTrickResult();
+  assert.equal(g.phase, PHASE.ROUND_RESULT);
+  g.continueAfterRound();
+  assert.equal(g.round, 2);
+  assert.equal(g.dealerIndex, 1);
+  for (const p of g.players) g.submitBid(p.id, 0);
+  assert.equal(g.currentPlayerIndex, 2); // official: left of the new dealer
+  assert.equal(g.viewFor("h0").openingLead, false);
+});
+
+test("a later opening rng still leaves later 局 to official rotation", () => {
+  const g = new Game(seats(4, 0), { rng: () => 0.9 });
+  g.start();
+  assert.equal(g.openingLeaderIndex, 3);
+  for (const p of g.players) g.submitBid(p.id, 0);
+  assert.equal(g.currentPlayerIndex, 3);
+});
+

@@ -79,6 +79,12 @@ const state = {
   winBuzzKey: "",
   trickLogPeek: false,
   handCollapsed: false,
+  wantedSeats: 5,
+  openingDrawKey: "",
+  openingDrawLanded: false,
+  openingDrawSpinName: "",
+  openingDrawTimer: 0,
+  openingDrawHiddenKey: "",
 };
 
 const app = document.getElementById("app");
@@ -750,6 +756,7 @@ function bindKeyboardInset() {
 function confirmSelectedPlay() {
   const view = state.view;
   if (!state.selectedCardId || !view) return false;
+  if (openingDrawActive(view)) return false;
   const card = (view.myHand || []).find((c) => c.id === state.selectedCardId);
   if (!card) return false;
   if (card.special === "tigress") {
@@ -919,6 +926,80 @@ function bindSheetSwipe() {
   });
 }
 
+
+function openingDrawKey(v) {
+  if (!v) return "";
+  return `${v.code || ""}:${v.round}:${v.openingLeaderIndex}`;
+}
+
+function openingDrawActive(v) {
+  return !!(v && v.openingLead && state.openingDrawHiddenKey !== openingDrawKey(v));
+}
+
+function maybeStartOpeningDraw(v) {
+  if (!v?.openingLead) return;
+  const key = openingDrawKey(v);
+  if (state.openingDrawKey === key) return;
+  if (state.openingDrawTimer) clearTimeout(state.openingDrawTimer);
+  state.openingDrawKey = key;
+  state.openingDrawLanded = false;
+  state.openingDrawSpinName = v.openingLeaderName || "";
+  const names = (v.players || []).map((p) => p.name).filter(Boolean);
+  const winner = v.openingLeaderName || names[v.openingLeaderIndex] || names[0] || "";
+  const reduced = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+  if (reduced || names.length < 2) {
+    state.openingDrawLanded = true;
+    state.openingDrawSpinName = winner;
+    state.openingDrawTimer = setTimeout(() => {
+      if (state.openingDrawKey !== key) return;
+      state.openingDrawHiddenKey = key;
+      state.openingDrawTimer = 0;
+      render();
+    }, 700);
+    return;
+  }
+  let tick = 0;
+  const interval = 90;
+  const ticks = 16; // ~1440ms of cycling, then 800ms landed (~2200ms total)
+  const step = () => {
+    if (state.openingDrawKey !== key) return;
+    tick++;
+    if (tick >= ticks) {
+      state.openingDrawLanded = true;
+      state.openingDrawSpinName = winner;
+      render();
+      state.openingDrawTimer = setTimeout(() => {
+        if (state.openingDrawKey !== key) return;
+        state.openingDrawHiddenKey = key;
+        state.openingDrawTimer = 0;
+        render();
+      }, 800);
+      return;
+    }
+    state.openingDrawSpinName = names[(tick - 1) % names.length];
+    render();
+    state.openingDrawTimer = setTimeout(step, interval);
+  };
+  state.openingDrawTimer = setTimeout(step, interval);
+}
+
+function openingDrawHTML(v) {
+  maybeStartOpeningDraw(v);
+  if (!v?.openingLead) return "";
+  const key = openingDrawKey(v);
+  if (state.openingDrawKey !== key || state.openingDrawHiddenKey === key) return "";
+  const name = escapeHtml(state.openingDrawLanded ? (v.openingLeaderName || state.openingDrawSpinName) : (state.openingDrawSpinName || "…"));
+  const main = state.openingDrawLanded
+    ? `今場由<span class="opening-draw-name">${name}</span>先出`
+    : `<span class="opening-draw-name">${name}</span>`;
+  return `<div class="opening-draw-overlay" role="status" aria-live="polite">
+    <div class="opening-draw-card">
+      <div class="opening-draw-kicker">抽邊個出先</div>
+      <div class="opening-draw-main">${main}</div>
+    </div>
+  </div>`;
+}
+
 function playWaitHTML(v) {
   if (!v || (v.phase !== "playing" && v.phase !== "choosingTigress")) return "";
   const players = v.players || [];
@@ -995,11 +1076,18 @@ function midTrickCueHTML(v) {
   return "";
 }
 
+function yourTurnHintHTML(v) {
+  if (!v || v.phase !== "playing" || !v.isMyTurn) return "";
+  if (v.openingLead && state.openingDrawHiddenKey !== openingDrawKey(v)) return "";
+  return `<div class="your-turn-hint" role="status">輪到你出牌</div>`;
+}
+
 function tableCuesRowHTML(v) {
   const last = lastTrickCueHTML(v);
   const mid = midTrickCueHTML(v);
-  if (!last && !mid) return "";
-  return `<div class="table-cues-row">${last}${mid}</div>`;
+  const turn = yourTurnHintHTML(v);
+  if (!last && !mid && !turn) return "";
+  return `<div class="table-cues-row">${last}${mid}${turn}</div>`;
 }
 
 function submitLobbyName() {
@@ -1571,12 +1659,20 @@ function scrollPlayableIntoView() {
   if (el) el.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
 }
 
+function clampSeats(n) {
+  const v = Number(n);
+  if (!Number.isInteger(v)) return 5;
+  return Math.min(6, Math.max(2, v));
+}
+
 function createRoom() {
   const name = state.name.trim();
   if (name) localStorage.setItem(NAME_KEY, name);
+  const seats = clampSeats(state.wantedSeats);
+  state.wantedSeats = seats;
   connect({
     onOpen() {
-      send({ type: "createRoom", name });
+      send({ type: "createRoom", name, seats });
     },
   });
 }
@@ -1692,8 +1788,18 @@ app.addEventListener("click", (e) => {
   else if (act === "set-name") { submitLobbyName(); return; }
   else if (act === "copy-code") copyText(state.code);
   else if (act === "copy-link") copyText(shareUrl(state.code));
-  else if (act === "seats-inc") send({ type: "setSeats", count: (view?.seats || 5) + 1 });
-  else if (act === "seats-dec") send({ type: "setSeats", count: (view?.seats || 5) - 1 });
+  else if (act === "seats-inc" || act === "seats-dec" || act === "set-seats") {
+    const delta = act === "seats-inc" ? 1 : act === "seats-dec" ? -1 : 0;
+    const next = act === "set-seats"
+      ? clampSeats(t.dataset.n)
+      : clampSeats((state.screen === "home" ? (state.wantedSeats || 5) : (view?.seats || 5)) + delta);
+    if (state.screen === "home") {
+      state.wantedSeats = next;
+      render();
+      return;
+    }
+    send({ type: "setSeats", count: next });
+  }
   else if (act === "ai-fill") send({ type: "setAiFill", enabled: t.dataset.on !== "1" });
   else if (act === "ready") send({ type: "ready", ready: t.dataset.on !== "1" });
   else if (act === "start") send({ type: "startGame" });
@@ -1741,6 +1847,7 @@ app.addEventListener("click", (e) => {
     const legal = new Set(view?.legalCardIds || []);
     state.inspect = null;
     playCardFlip();
+    if (openingDrawActive(view)) return;
     if (view?.phase !== "playing" || !view?.isMyTurn || !legal.has(id)) {
       if (t.closest(".hand .sk-wrap")) shakeIllegalCard(id);
       openInspect(id, t.dataset.why || "");
@@ -1964,6 +2071,14 @@ function renderHome() {
         <label class="field-label" for="name-input">你嘅名</label>
         <input id="name-input" maxlength="12" placeholder="你（唔填就叫「你」）" value="${escapeHtml(state.name)}" autocomplete="nickname" />
         <div class="home-gap"></div>
+        <div class="seat-pick home-seat-pick">
+          <div class="field-label" id="home-seats-label">玩家人數（2–6）</div>
+          <p class="seat-pick-hint">預設 5 人。開房之後仍然可以改。</p>
+          <div class="seat-picks" role="group" aria-labelledby="home-seats-label">
+            ${[2, 3, 4, 5, 6].map((n) => `<button type="button" class="seat-pick-btn${(state.wantedSeats || 5) === n ? " on" : ""}" data-act="set-seats" data-n="${n}" aria-pressed="${(state.wantedSeats || 5) === n}">${n} 人</button>`).join("")}
+          </div>
+        </div>
+        <div class="home-gap"></div>
         <button class="btn btn-gold" data-act="create">開房</button>
         <div class="or-row">或者加入</div>
         ${codeBoxesHTML(prefill)}
@@ -2039,15 +2154,11 @@ function renderLobby() {
       </div>
       <div class="lobby-scroll">
       ${host ? `
-        <div class="panel">
-          <h3>桌子設定</h3>
-          <div class="seat-row">
-            <span>玩家人數（2–6）</span>
-            <div class="stepper">
-              <button data-act="seats-dec" aria-label="減少">−</button>
-              <span class="n">${v.seats}</span>
-              <button data-act="seats-inc" aria-label="增加">+</button>
-            </div>
+        <div class="panel seat-pick-panel">
+          <h3>玩家人數（2–6 人）</h3>
+          <p class="seat-pick-hint">預設 5 人。可以自己揀幾個人玩，再用電腦補滿空位。</p>
+          <div class="seat-picks" role="group" aria-label="玩家人數">
+            ${[2, 3, 4, 5, 6].map((n) => `<button type="button" class="seat-pick-btn${v.seats === n ? " on" : ""}" data-act="set-seats" data-n="${n}" aria-pressed="${v.seats === n}">${n} 人</button>`).join("")}
           </div>
           <div style="height:12px"></div>
           <div class="toggle-row">
@@ -2058,9 +2169,12 @@ function renderLobby() {
           </div>
         </div>
       ` : `
-        <div class="panel">
-          <h3>桌子設定</h3>
-          <div class="seat-row"><span>玩家人數</span><strong>${v.seats} 人</strong></div>
+        <div class="panel seat-pick-panel">
+          <h3>玩家人數</h3>
+          <p class="seat-pick-hint">房主已揀 ${v.seats} 人桌（2–6 人）。得房主可以改。</p>
+          <div class="seat-picks is-locked" role="group" aria-label="玩家人數">
+            ${[2, 3, 4, 5, 6].map((n) => `<button type="button" class="seat-pick-btn${v.seats === n ? " on" : ""}" disabled aria-pressed="${v.seats === n}">${n} 人</button>`).join("")}
+          </div>
           <div style="height:8px"></div>
           <div class="toggle-row"><span>電腦補位</span><strong>${v.aiFill ? "開" : "關"}</strong></div>
         </div>
@@ -2122,15 +2236,16 @@ function seatBidLine(p, v) {
     return { html: "", busted: false, explode: false };
   }
   const busted = p.tricksWon > p.bid;
+  const made = !busted && p.tricksWon === p.bid;
   const explode = busted && markBustExplode(p, v);
   const reveal = bidRevealAttr(v, p._visualIndex || 0);
-  const html = `<div class="seat-bidline${busted ? " busted" : ""}${reveal.cls}" style="${reveal.style}" aria-label="叫 ${p.bid} 贏 ${p.tricksWon}${busted ? "，爆咗" : ""}">
+  const html = `<div class="seat-bidline${busted ? " busted" : made ? " made" : ""}${reveal.cls}" style="${reveal.style}" aria-label="叫 ${p.bid} 贏 ${p.tricksWon}${busted ? "，爆咗" : made ? "，夠回合" : ""}">
     <span class="bid-call">叫 ${p.bid}</span>
     <span class="bid-sep">／</span>
     <span class="bid-won">贏 ${p.tricksWon}</span>
     ${busted ? `<span class="bust-tag">爆咗</span>` : ""}
   </div>`;
-  return { html, busted, explode };
+  return { html, busted, made, explode };
 }
 
 function isPlayerThinking(p, v) {
@@ -2317,7 +2432,12 @@ function circleTableHTML(v) {
       const slam = justPlayed ? " slam" : "";
       if (justPlayed && !isMe) arriveFlag = true;
       const voidCause = destroyed && isVoidCausePlay(played);
-      card = `<button class="seat-card ${win ? "winner" : ""} ${destroyed && !voidCause ? "voided" : ""}${voidCause ? " void-cause" : ""}${slam}" data-act="inspect" data-id="${escapeHtml(played.card.id)}" aria-label="睇呢張牌">
+      const midLead = (v.phase === "playing" || v.phase === "choosingTigress")
+        && v.currentTrickLead
+        && v.currentTrickLead.destroyed !== true
+        && v.currentTrickLead.leading !== false
+        && v.currentTrickLead.playerIndex === playerIndex;
+      card = `<button class="seat-card ${win ? "winner" : ""} ${midLead ? "leading-now" : ""} ${destroyed && !voidCause ? "voided" : ""}${voidCause ? " void-cause" : ""}${slam}" data-act="inspect" data-id="${escapeHtml(played.card.id)}" aria-label="睇呢張牌">
            ${cardFaceHTML(played.card, { tigressAsPirate: played.tigressAsPirate, compact: true })}
            ${win ? `<div class="seat-win">贏</div>` : ""}
            ${voidCause ? `<div class="seat-win void-cause-tag">作廢</div>` : ""}
@@ -2644,11 +2764,10 @@ function renderTable() {
   if (state.handCollapsed && ((canPlay && v.phase === "playing") || canBidNow)) {
     state.handCollapsed = false;
   }
-  const handTray = `<div class="hand-tray">
-    <div class="hand-count">手牌 ${handCards.length} 張</div>
-    <button type="button" class="btn-text" data-act="toggle-hand">${state.handCollapsed ? "顯示手牌" : "收起手牌 · 睇晒張枱"}</button>
+    const handTray = `<div class="hand-tray">
+    <div class="hand-label">手牌 ${handCards.length} 張</div>
   </div>`;
-  const hand = `<div class="hand-scroll${state.handCollapsed ? " is-collapsed" : ""}"><div class="hand${dealing ? " dealing" : ""}">${handCards
+  const hand = `<div class="hand-scroll"><div class="hand${dealing ? " dealing" : ""}">${handCards
     .map((c, i) => {
       const isLegal = canPlay && legal.has(c.id);
       const dim = canPlay && !legal.has(c.id);
@@ -2686,6 +2805,7 @@ function renderTable() {
     ${bannerHTML()}
     <div class="screen table-screen${ledClass ? ` led-${ledClass}` : ""}">
       ${flourishBannerHTML()}
+      ${openingDrawHTML(v)}
       <div class="table-header">
         <div class="header-left">
           <button class="btn-text" data-act="leave">離開</button>
@@ -2711,12 +2831,10 @@ function renderTable() {
       <div class="table-top-slot">${bidTotalChipHTML(v)}${tableCuesRowHTML(v)}</div>
       ${circleTableHTML(v)}
       <div class="table-dock">
-        ${prevTrickButtonHTML(v)}
-        <div class="dock-status-row">${playWaitHTML(v)}${followSuitHintHTML(v)}</div>
+        <div class="dock-status-row">${followSuitHintHTML(v)}</div>
         <div class="error-line">${escapeHtml(state.error)}</div>
         ${bidPanel}
         ${confirmBar}
-        ${myBidTrackHTML(v)}
         ${handTray}
         ${hand}
       </div>

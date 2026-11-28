@@ -22,7 +22,7 @@
   --green: #2e945c;
   --purple: #8c47ad;
   --black: #1f1f24;
-  font-family: "PingFang HK", "PingFang TC", "Noto Sans TC", "Noto Sans CJK TC",
+  font-family: "Chiron Hei HK", "PingFang HK", "PingFang TC", "Noto Sans TC", "Noto Sans CJK TC",
     "Microsoft JhengHei", "Source Han Sans TC", sans-serif;
 }
 
@@ -129,7 +129,7 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
 .brand-mark svg { width: 100%; height: 100%; }
 .brand h1 {
   margin: 0;
-  font-family: "Songti TC", "Noto Serif TC", "PMingLiU", "Songti SC", serif;
+  font-family: "Chiron Sung HK", "Songti TC", "Noto Serif TC", "PMingLiU", "Songti SC", serif;
   font-size: clamp(26px, 7vw, 36px);
   font-weight: 700;
   color: var(--gold-soft);
@@ -154,6 +154,35 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   flex: 0 0 auto;
 }
 .home-gap { height: 8px; }
+.seat-pick-hint {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--white-70);
+  line-height: 1.35;
+}
+.seat-picks {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+}
+.seat-pick-btn {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 0;
+  border-radius: 10px;
+  border: 1px solid rgba(250, 224, 148, 0.28);
+  background: rgba(0, 0, 0, 0.28);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cream);
+}
+.seat-pick-btn.on {
+  border-color: var(--gold);
+  background: var(--gold-dim);
+  color: var(--gold-soft);
+}
+.seat-picks.is-locked .seat-pick-btn:not(.on) { opacity: 0.55; }
+.home-seat-pick { text-align: left; }
 .home-foot { flex: 0 0 auto; }
 .home-card .field-label { margin-bottom: 4px; }
 .home-card input { padding: 11px 14px; }
@@ -785,6 +814,14 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
 .seat-bidline.busted .bid-call,
 .seat-bidline.busted .bid-won,
 .seat-bidline.busted .bid-sep { color: #ffe4dc; }
+.seat-bidline.made {
+  background: rgba(10, 64, 36, 0.88);
+  border-color: #4ad88a;
+  box-shadow: 0 0 0 1px rgba(74, 216, 138, 0.55);
+}
+.seat-bidline.made .bid-call,
+.seat-bidline.made .bid-won,
+.seat-bidline.made .bid-sep { color: #d9ffe8; }
 .bust-tag {
   font-size: 10px;
   font-weight: 800;
@@ -934,6 +971,13 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   filter: drop-shadow(0 0 8px rgba(224, 137, 112, 0.85));
 }
 .seat-card.voided { opacity: 0.72; }
+.seat-card.leading-now {
+  z-index: 7;
+}
+.seat-card.leading-now .sk-card {
+  box-shadow: 0 0 0 2px #fff8dc, 0 0 0 4px var(--gold), 0 0 12px rgba(237, 191, 89, 0.7);
+  /* glow only — do not scale or change the 2.4/3.5 box */
+}
 .seat-win.void-cause-tag {
   background: #9b3b2a;
   color: #fff4e8;
@@ -1658,7 +1702,7 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
 .sheet .actions { display: flex; gap: 10px; margin-top: 8px; }
 .rules-screen { overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .rules-page { padding-bottom: 8px; }
-.rules-page h2 { color: #7a5a16; font-family: "Songti TC", "Noto Serif TC", serif; font-size: 28px; }
+.rules-page h2 { color: #7a5a16; font-family: "Chiron Sung HK", "Songti TC", "Noto Serif TC", serif; font-size: 28px; }
 .rules-page h3 { color: #8a5a12; margin-top: 16px; font-size: 17px; }
 .rules-page p { font-size: 15px; }
 
@@ -2059,6 +2103,41 @@ button, a, .btn, .btn-text, .sk-play, .sk-wrap, .seat-card, .code, input, .bid-g
   display: grid;
   place-items: center;
   pointer-events: none;
+}
+.opening-draw-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 28;
+  display: grid;
+  place-items: center;
+  background: rgba(5, 13, 26, 0.58);
+  pointer-events: auto;
+}
+.opening-draw-card {
+  text-align: center;
+  padding: 22px 28px;
+  border-radius: 18px;
+  border: 1px solid rgba(237, 191, 89, 0.45);
+  background: rgba(10, 22, 36, 0.94);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+  max-width: 86%;
+}
+.opening-draw-kicker {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--gold-soft);
+  letter-spacing: 0.06em;
+  margin-bottom: 8px;
+}
+.opening-draw-main {
+  font-size: 22px;
+  font-weight: 800;
+  color: #fff4c4;
+  line-height: 1.35;
+}
+.opening-draw-name { color: var(--gold); }
+@media (prefers-reduced-motion: reduce) {
+  .opening-draw-name { transition: none; }
 }
 .flourish-banner {
   font-size: clamp(20px, 6.4cqw, 28px);
@@ -2567,7 +2646,7 @@ button, a, .btn, .btn-text, .sk-play, .sk-wrap, .seat-card, .code, input, .bid-g
 }
 .boot-splash h1 {
   margin: 0;
-  font-family: "Songti TC", "Noto Serif TC", "PMingLiU", "Songti SC", serif;
+  font-family: "Chiron Sung HK", "Songti TC", "Noto Serif TC", "PMingLiU", "Songti SC", serif;
   font-size: 36px;
   font-weight: 700;
   color: var(--gold-soft);
@@ -2759,6 +2838,18 @@ body.dragging-card { cursor: grabbing; }
 .table-status-chip.dim {
   color: rgba(255, 255, 255, 0.8);
   font-weight: 700;
+}
+.your-turn-hint {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 800;
+  color: #1a1206;
+  background: var(--gold);
+  border-radius: 999px;
+  padding: 4px 12px;
+  line-height: 1.25;
+  white-space: nowrap;
 }
 .seat-info { z-index: 5; }
 .seat-card { isolation: isolate; }
