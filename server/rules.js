@@ -1,4 +1,6 @@
-/** Skull King 2021+ Grand Prix rules, including 八爪魚 and 白鯨 (no Loot cards). */
+/** Skull King 2021+ Grand Prix rules, including 八爪魚 and 白鯨 (no Loot cards).
+ *  The house deck is the official 72 plus a second black 14 and a second Tigress.
+ */
 
 export const SUITS = ["yellow", "green", "purple", "black"];
 
@@ -15,7 +17,7 @@ export const SPECIAL_INFO = {
   escape: { chineseName: "逃脫", count: 5 },
   pirate: { chineseName: "海盜", count: 5 },
   mermaid: { chineseName: "人魚", count: 2 },
-  tigress: { chineseName: "母老虎", count: 1 },
+  tigress: { chineseName: "母老虎", count: 2 },
   skullKing: { chineseName: "骷髏王", count: 1 },
   kraken: { chineseName: "八爪魚", count: 1 },
   whiteWhale: { chineseName: "白鯨", count: 1 },
@@ -32,8 +34,9 @@ const SPECIAL_HAND_ORDER = [
 ];
 const SUIT_HAND_ORDER = ["black", "purple", "green", "yellow"];
 
-export function makeSuit(suit, rank, id = `${suit}-${rank}`) {
-  return { id, suit, rank, special: null };
+export function makeSuit(suit, rank, id, copyIndex = 0) {
+  const auto = copyIndex ? `${suit}-${rank}-${copyIndex}` : `${suit}-${rank}`;
+  return { id: id ?? auto, suit, rank, special: null, copyIndex };
 }
 
 export function makeSpecial(special, copyIndex = 0, id) {
@@ -53,16 +56,17 @@ export function isSpecial(card) {
 
 export function sameCard(a, b) {
   if (!a || !b) return false;
-  if (a.id && b.id && a.id === b.id) return true;
+  if (a.id && b.id) return a.id === b.id;
   if (a.special && a.special === b.special) {
     return (a.copyIndex ?? 0) === (b.copyIndex ?? 0);
   }
-  return a.suit === b.suit && a.rank === b.rank && !a.special && !b.special;
+  return a.suit === b.suit && a.rank === b.rank && !a.special && !b.special
+    && (a.copyIndex ?? 0) === (b.copyIndex ?? 0);
 }
 
 export function cardKey(card) {
   if (card.special) return `${card.special}:${card.copyIndex ?? 0}`;
-  return `${card.suit}:${card.rank}`;
+  return `${card.suit}:${card.rank}:${card.copyIndex ?? 0}`;
 }
 
 export function displayName(card) {
@@ -81,10 +85,12 @@ export function standardDeck() {
       cards.push(makeSuit(suit, rank));
     }
   }
+  // House rule: a second, distinct black 14. Official 14 bonus still applies to each.
+  cards.push(makeSuit("black", 14, "black-14-1", 1));
   for (let i = 0; i < 5; i++) cards.push(makeSpecial("escape", i));
   for (let i = 0; i < 5; i++) cards.push(makeSpecial("pirate", i));
   for (let i = 0; i < 2; i++) cards.push(makeSpecial("mermaid", i));
-  cards.push(makeSpecial("tigress"));
+  for (let i = 0; i < 2; i++) cards.push(makeSpecial("tigress", i));
   cards.push(makeSpecial("skullKing"));
   cards.push(makeSpecial("kraken"));
   cards.push(makeSpecial("whiteWhale"));

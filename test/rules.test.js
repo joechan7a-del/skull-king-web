@@ -32,7 +32,7 @@ const ESC = "escape",
 function hasCard(list, card) {
   return list.some((c) => {
     if (card.special) return c.special === card.special && (c.copyIndex ?? 0) === (card.copyIndex ?? 0);
-    return c.suit === card.suit && c.rank === card.rank;
+    return c.suit === card.suit && c.rank === card.rank && (c.copyIndex ?? 0) === (card.copyIndex ?? 0);
   });
 }
 
@@ -169,18 +169,23 @@ test("scoring examples from rulebook", () => {
   assert.deepEqual(scoreRound(1, 1, 4, 40), { bidPoints: 20, bonus: 40, total: 60 });
 });
 
-test("basic deck has 72 cards including 八爪魚 and 白鯨, no loot", () => {
+test("basic deck has 74 house-rule cards including two black 14s and two Tigresses, no loot", () => {
   const deck = standardDeck();
-  assert.equal(deck.length, 72);
-  assert.equal(deck.filter((c) => c.suit).length, 56);
+  assert.equal(deck.length, 74);
+  assert.equal(deck.filter((c) => c.suit).length, 57);
+  assert.equal(deck.filter((c) => c.suit === "black" && c.rank === 14).length, 2);
+  const black14 = deck.filter((c) => c.suit === "black" && c.rank === 14);
+  assert.notEqual(black14[0].id, black14[1].id);
   assert.equal(deck.filter((c) => c.special === "escape").length, 5);
   assert.equal(deck.filter((c) => c.special === "pirate").length, 5);
   assert.equal(deck.filter((c) => c.special === "mermaid").length, 2);
-  assert.equal(deck.filter((c) => c.special === "tigress").length, 1);
+  assert.equal(deck.filter((c) => c.special === "tigress").length, 2);
   assert.equal(deck.filter((c) => c.special === "skullKing").length, 1);
   assert.equal(deck.filter((c) => c.special === "kraken").length, 1);
   assert.equal(deck.filter((c) => c.special === "whiteWhale").length, 1);
   assert.equal(deck.filter((c) => c.special === "loot").length, 0);
+  const ids = deck.map((c) => c.id);
+  assert.equal(new Set(ids).size, 74);
 });
 
 test("isLegal agrees with legalCards", () => {
@@ -340,6 +345,16 @@ test("black 14 + colour 14 bonuses both go to the 白鯨 number winner", () => {
   const r = resolveTrick(t);
   assert.equal(r.winnerPlayerIndex, 0); // tie at 14, first played
   assert.equal(bonusPts(t, 0), 10 + 20);
+});
+
+test("two black 14s each award the official +20 when the trick is captured", () => {
+  const t = [
+    P(0, suit(B, 14)),
+    P(1, suit(B, 14, "black-14-1", 1)),
+    P(2, suit(Y, 2)),
+  ];
+  assert.equal(winnerIndex(t), 0);
+  assert.equal(bonusPts(t, 0), 40);
 });
 
 test("destroyed trick awards no 14 bonus even if a 14 was played", () => {

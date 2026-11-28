@@ -107,14 +107,14 @@ test("tigress must be declared; cancel puts the card back", () => {
   g.players[1].bid = 0;
   g.phase = PHASE.PLAYING;
   g.currentPlayerIndex = 0;
-  const need = g.playCard("h0", "tigress");
+  const need = g.playCard("h0", "tigress-0");
   assert.equal(need.needTigress, true);
   assert.equal(g.phase, PHASE.CHOOSING_TIGRESS);
   assert.equal(g.players[0].hand.length, 1);
   g.cancelTigress("h0");
   assert.equal(g.phase, PHASE.PLAYING);
   assert.equal(g.players[0].hand[0].special, "tigress");
-  g.playCard("h0", "tigress");
+  g.playCard("h0", "tigress-0");
   g.resolveTigress("h0", true);
   assert.equal(g.trick[0].tigressAsPirate, true);
   g.playCard("h1", "green-2");
@@ -459,7 +459,7 @@ test("previousTrick is snapshotted after leaving trickResult and cleared on a ne
   assert.ok(!view.previousTrick.cards.some((c) => c.card.id === "green-14"));
   assert.ok(!view.myHand.some((c) => ["yellow-3", "yellow-12"].includes(c.id)));
 
-  g.playCard("h1", "tigress", true);
+  g.playCard("h1", "tigress-0", true);
   g.playCard("h0", "green-14");
   assert.equal(g.phase, PHASE.TRICK_RESULT);
   view = g.viewFor("h1");

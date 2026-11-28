@@ -69,9 +69,33 @@ function kindClass(card) {
   return `suit-${card.suit}`;
 }
 
+export function cardArtUrl(card) {
+  if (!card) return "";
+  if (card.special === "escape") return "/cards/escape.webp";
+  if (card.special === "tigress") return `/cards/tigress-${card.copyIndex ?? 0}.webp`;
+  if (card.special === "pirate") return `/cards/pirate-${card.copyIndex ?? 0}.webp`;
+  if (card.special === "mermaid") return `/cards/mermaid-${card.copyIndex ?? 0}.webp`;
+  if (card.special) return `/cards/${card.special}.webp`;
+  if (card.suit === "black" && card.rank === 14 && (card.copyIndex ?? 0) > 0) {
+    return "/cards/black-14-1.webp";
+  }
+  if (card.suit && card.rank) return `/cards/${card.suit}-${card.rank}.webp`;
+  return "";
+}
+
+export function cardFaceLabel(card, { tigressAsPirate = null } = {}) {
+  if (card?.special === "tigress" && tigressAsPirate != null) {
+    return tigressAsPirate ? "母老虎（當海盜）" : "母老虎（當逃脫）";
+  }
+  if (card?.special) return SPECIAL_INFO[card.special]?.chineseName || "";
+  if (card?.suit) return `${SUIT_INFO[card.suit].shortName}${card.rank}`;
+  return "";
+}
+
 export function cardFaceHTML(card, { dimmed = false, tigressAsPirate = null, compact = false } = {}) {
   const cls = [
     "sk-card",
+    "has-art",
     kindClass(card),
     dimmed ? "dimmed" : "",
     compact ? "compact" : "",
@@ -79,32 +103,15 @@ export function cardFaceHTML(card, { dimmed = false, tigressAsPirate = null, com
     .filter(Boolean)
     .join(" ");
 
-  if (card.special) {
-    let title = SPECIAL_INFO[card.special].chineseName;
-    if (card.special === "tigress" && tigressAsPirate != null) {
-      title = tigressAsPirate ? "母老虎·海盜" : "母老虎·逃脫";
-    }
-    const icon = ICONS[card.special] || ICONS.crown;
-    return `<div class="${cls}" data-id="${escapeAttr(card.id)}">
-      <div class="sk-card-inner">
-        <div class="sk-special">
-          <span class="sk-icon">${icon}</span>
-          <span class="sk-special-name">${escapeHtml(title)}</span>
-        </div>
-      </div>
-    </div>`;
-  }
-
-  const info = SUIT_INFO[card.suit];
-  const icon = ICONS[card.suit];
-  return `<div class="${cls}" data-id="${escapeAttr(card.id)}">
+  const label = cardFaceLabel(card, { tigressAsPirate });
+  const src = cardArtUrl(card);
+  const declared = card.special === "tigress" && tigressAsPirate != null
+    ? `<span class="sk-card-flag">${tigressAsPirate ? "當海盜" : "當逃脫"}</span>`
+    : "";
+  return `<div class="${cls}" data-id="${escapeAttr(card.id)}" role="img" aria-label="${escapeAttr(label)}">
     <div class="sk-card-inner">
-      <div class="sk-corner">
-        <span class="sk-rank">${card.rank}</span>
-        <span class="sk-suit-short">${info.shortName}</span>
-      </div>
-      <span class="sk-icon sk-suit-icon">${icon}</span>
-      <div class="sk-suit-name">${escapeHtml(info.chineseName)}</div>
+      <img class="sk-card-art" src="${escapeAttr(src)}" alt="${escapeAttr(label)}" draggable="false" width="784" height="1100">
+      ${declared}
     </div>
   </div>`;
 }

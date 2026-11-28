@@ -61,7 +61,7 @@ test("the felt keeps a locked mid-trick proportion on every in-game screen", () 
   assert.match(render, /circleTableHTML\(v\)/);
   const dockChunk = render.slice(render.indexOf("table-dock"), render.indexOf("pendingTigress"));
   assert.doesNotMatch(dockChunk, /circleTableHTML/);
-  assert.match(html, /app\.js\?v=c21/);
+  assert.match(html, /app\.js\?v=c22/);
   // overlays must stay out of the table flex flow
   assert.match(css, /\.confirm-bar\s*\{[^}]*position:\s*absolute/s);
   const banner = block(css, ".banner");
@@ -194,7 +194,7 @@ test("trick and round results are overlay dialogs and do not shrink the table", 
   const score = js.slice(js.indexOf("function scoreHTML"), js.indexOf("function renderRules"));
   assert.match(score, /class="overlay center"/);
   assert.match(score, /下一局/);
-  assert.match(html, /app\.js\?v=c21/);
+  assert.match(html, /app\.js\?v=c22/);
 });
 
 test("AI plays and post-win pauses are modestly longer", () => {
@@ -304,5 +304,27 @@ test("avatar colors follow a stable seat index, not a hashed name or id", () => 
   const gold = css.slice(css.indexOf(".avatar.tone.gold"));
   assert.match(gold.slice(0, 400), /--av-bg/);
   assert.doesNotMatch(gold.slice(0, 280), /background:\s*var\(--gold\)/);
+});
+
+test("cardFaceHTML uses compressed house-rule art and does not overlay a second rank", () => {
+  assert.match(js, /from "\.\/cards\.js"/);
+  const cards = readFileSync(join(root, "public/cards.js"), "utf8");
+  assert.match(cards, /export function cardArtUrl/);
+  assert.match(cards, /export function cardFaceHTML/);
+  assert.match(cards, /sk-card-art/);
+  assert.match(cards, /\/cards\/escape\.webp/);
+  assert.match(cards, /\/cards\/black-14-1\.webp/);
+  assert.doesNotMatch(cards, /sk-rank/);
+  assert.match(css, /\.sk-card-art/);
+  assert.match(css, /object-fit:\s*contain/);
+  const sk = css.slice(css.indexOf("\n.sk-card {"), css.indexOf("\n.sk-card.compact"));
+  assert.match(sk, /aspect-ratio:\s*2\.4\s*\/\s*3\.5/);
+});
+
+test("rules copy describes the 74-card house deck", () => {
+  assert.match(js, /74 張牌嘅家規組牌/);
+  assert.match(js, /2 張母老虎/);
+  assert.match(js, /黑 14 兩張/);
+  assert.doesNotMatch(js, /牌組 72 張：/);
 });
 
