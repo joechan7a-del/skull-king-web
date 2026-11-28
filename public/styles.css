@@ -2983,82 +2983,8 @@ body.dragging-card { cursor: grabbing; }
   .your-turn-hint { animation: none; }
 }
 
-/* Enlarged-preview character idle: the painted figure moves a little; badges and frame stay still. */
-.sk-char-idle-clip {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-  -webkit-mask-image: radial-gradient(ellipse 56% 52% at 50% 48%, #000 0 58%, transparent 78%);
-  mask-image: radial-gradient(ellipse 56% 52% at 50% 48%, #000 0 58%, transparent 78%);
-}
-.sk-char-idle {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  object-position: center;
-  pointer-events: none;
-  transform-origin: 50% 62%;
-  animation-timing-function: ease-in-out;
-  animation-iteration-count: infinite;
-}
-.sk-idle-breath {
-  animation-name: char-idle-breath;
-}
-.sk-idle-sway {
-  animation-name: char-idle-sway;
-}
-.sk-idle-lean {
-  animation-name: char-idle-lean;
-}
-.sk-idle-shift {
-  animation-name: char-idle-shift;
-}
-.sk-idle-nod {
-  animation-name: char-idle-nod;
-}
-.sk-idle-ready {
-  animation-name: char-idle-ready;
-}
-.sk-idle-drift {
-  animation-name: char-idle-drift;
-}
-@keyframes char-idle-breath {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(var(--idle-x, 0), var(--idle-y, -0.5%)) scale(var(--idle-s, 1.01)); }
-}
-@keyframes char-idle-sway {
-  0%, 100% { transform: translate(0, 0) rotate(0deg); }
-  50% { transform: translate(var(--idle-x, 0.5%), var(--idle-y, 0)) rotate(var(--idle-rot, 0.5deg)); }
-}
-@keyframes char-idle-lean {
-  0%, 100% { transform: rotate(0deg) translate(0, 0); }
-  40% { transform: rotate(var(--idle-rot, 0.6deg)) translate(var(--idle-x, 0.2%), var(--idle-y, 0.1%)); }
-  55% { transform: rotate(var(--idle-rot, 0.6deg)) translate(var(--idle-x, 0.2%), var(--idle-y, 0.1%)); }
-}
-@keyframes char-idle-shift {
-  0%, 100% { transform: translate(0, 0) rotate(0deg); }
-  50% { transform: translate(var(--idle-x, 0.55%), var(--idle-y, 0)) rotate(var(--idle-rot, -0.3deg)); }
-}
-@keyframes char-idle-nod {
-  0%, 100% { transform: translate(0, 0) rotate(0deg); }
-  35% { transform: translate(0, var(--idle-y, 0.45%)) rotate(var(--idle-rot, 0.3deg)); }
-}
-@keyframes char-idle-ready {
-  0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); }
-  30% { transform: translate(var(--idle-x, 0.15%), var(--idle-y, 0.35%)) rotate(var(--idle-rot, -0.4deg)) scale(var(--idle-s, 1.008)); }
-  55% { transform: translate(calc(var(--idle-x, 0.15%) * 0.4), calc(var(--idle-y, 0.35%) * 0.4)) rotate(0deg) scale(1); }
-}
-@keyframes char-idle-drift {
-  0%, 100% { transform: translate(0, 0) rotate(0deg); }
-  50% { transform: translate(var(--idle-x, 0.3%), var(--idle-y, -0.35%)) rotate(var(--idle-rot, 0.2deg)); }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .seat-card.special-slam .sk-card,
-  .sk-char-idle { animation: none; }
+  .seat-card.special-slam .sk-card { animation: none; }
 }
 
 .pirate-ability-overlay {

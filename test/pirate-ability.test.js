@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Game, PHASE } from "../server/game.js";
 import { scoreRound, playedCard, makeSuit, makeSpecial } from "../server/rules.js";
+import { RoomManager } from "../server/rooms.js";
 import { PIRATE_ABILITIES, winningPirateAbility } from "../public/pirates.js";
 
 function seats(n = 3) {
@@ -276,4 +277,104 @@ test("a destroyed trick does not grant a pirate ability", () => {
   ]);
   assert.equal(g.lastTrickDestroyed, true);
   assert.equal(g.pendingAbility, null);
+});
+
+function twoHumanRoom() {
+  const mgr = new RoomManager();
+  const { room, player: host } = mgr.createRoom({ name: "阿明" });
+  const guest = mgr.joinRoom({ code: room.code, name: "小芳" }).player;
+  host.connected = true;
+  guest.connected = true;
+  room.seats = 2;
+  mgr.setAiFill(room, host.id, false);
+  mgr.setReady(room, guest.id, true);
+  assert.equal(mgr.startGame(room, host.id).ok, true);
+  return { mgr, room, host, guest };
+}
+
+function playPirateWin(mgr, room, { lastTrick = false, copyIndex = 2 } = {}) {
+  const g = room.game;
+  const pirate = makeSpecial("pirate", copyIndex);
+  const number = makeSuit("yellow", 3);
+  g.players[0].hand = lastTrick ? [pirate] : [pirate, makeSuit("black", 1)];
+  g.players[1].hand = lastTrick ? [number] : [number, makeSuit("black", 2)];
+  g.players[0].bid = 1;
+  g.players[1].bid = 0;
+  g.phase = PHASE.PLAYING;
+  g.currentPlayerIndex = 0;
+  if (lastTrick) {
+    g.round = 1;
+    g.tricksPlayed = 5;
+  }
+  assert.equal(mgr.play(room, room.humans[0].id, pirate.id).ok, true);
+  assert.equal(mgr.play(room, room.humans[1].id, number.id).ok, true);
+  assert.equal(g.phase, PHASE.TRICK_RESULT);
+  assert.equal(g.lastWinnerIndex, 0);
+  return g;
+}
+
+test("the trick-win box is shown first; the pirate-ability prompt appears only after it is dismissed", () => {
+  const { mgr, room, host } = twoHumanRoom();
+  try {
+    const g = playPirateWin(mgr, room, { copyIndex: 2 });
+    assert.equal(g.pendingAbility?.id, "rosie");
+    const before = mgr.viewFor(room, host.id);
+    assert.equal(before.showTrickExplanation, false);
+    assert.equal(before.showPirateAbility, false);
+
+    room.trickExplanationShown = true;
+    room.abilityPromptShown = false;
+    const winBox = mgr.viewFor(room, host.id);
+    assert.equal(winBox.showTrickExplanation, true);
+    assert.equal(winBox.showPirateAbility, false);
+    assert.ok(winBox.pendingAbility);
+    const early = mgr.usePirateAbility(room, host.id, { leaderIndex: 0 });
+    assert.ok(early.error);
+
+    const dismissed = mgr.continueRound(room, host.id);
+    assert.equal(dismissed.ok, true);
+    assert.equal(dismissed.abilityPrompt, true);
+    assert.equal(g.phase, PHASE.TRICK_RESULT);
+    const ability = mgr.viewFor(room, host.id);
+    assert.equal(ability.showTrickExplanation, false);
+    assert.equal(ability.showPirateAbility, true);
+    assert.equal(ability.pendingAbility?.id, "rosie");
+    assert.equal(ability.showTrickExplanation && ability.showPirateAbility, false);
+
+    const used = mgr.usePirateAbility(room, host.id, { leaderIndex: 1 });
+    assert.equal(used.ok, true);
+    assert.notEqual(room.game.phase, PHASE.TRICK_RESULT);
+    assert.equal(room.game.currentPlayerIndex, 1);
+  } finally {
+    mgr._clearTimer(room);
+  }
+});
+
+test("Harry after the last trick still waits for the win box before the bid prompt, then the 局 can end", () => {
+  const { mgr, room, host } = twoHumanRoom();
+  try {
+    const g = playPirateWin(mgr, room, { lastTrick: true, copyIndex: 0 });
+    assert.equal(g.pendingAbility?.id, "harry");
+    room.trickExplanationShown = true;
+    const winBox = mgr.viewFor(room, host.id);
+    assert.equal(winBox.showTrickExplanation, true);
+    assert.equal(winBox.showPirateAbility, false);
+    assert.ok(mgr.usePirateAbility(room, host.id, { delta: 0 }).error);
+
+    const dismissed = mgr.continueRound(room, host.id);
+    assert.equal(dismissed.abilityPrompt, true);
+    const ability = mgr.viewFor(room, host.id);
+    assert.equal(ability.showTrickExplanation, false);
+    assert.equal(ability.showPirateAbility, true);
+    assert.equal(ability.pendingAbility?.id, "harry");
+
+    const used = mgr.usePirateAbility(room, host.id, { delta: 0 });
+    assert.equal(used.ok, true);
+    assert.equal(room.game.phase, PHASE.ROUND_RESULT);
+    const after = mgr.viewFor(room, host.id);
+    assert.equal(after.showTrickExplanation, false);
+    assert.equal(after.showPirateAbility, false);
+  } finally {
+    mgr._clearTimer(room);
+  }
 });

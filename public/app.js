@@ -2080,7 +2080,7 @@ function inspectHTML() {
   return `<div class="overlay center" data-act="close-inspect">
     <div class="sheet inspect-sheet inspect-card-sheet" data-stop="1" data-sheet-dismiss="close-inspect">
       ${sheetHandleHTML()}
-      <div class="inspect-card${ins.why ? " illegal-shake" : ""}">${cardFaceHTML(card, { tigressAsPirate: ins.tigressAsPirate, preview: true })}</div>
+      <div class="inspect-card${ins.why ? " illegal-shake" : ""}">${cardFaceHTML(card, { tigressAsPirate: ins.tigressAsPirate })}</div>
       <h2>${escapeHtml(title)}</h2>
       <p>${escapeHtml(help)}</p>
       ${ins.why ? `<p class="why-line">${escapeHtml(ins.why)}</p>` : ""}
@@ -2913,7 +2913,7 @@ function handOverlap(count) {
 
 function pirateAbilityHTML(v) {
   const ab = v?.pendingAbility;
-  if (!ab) return "";
+  if (!v?.showPirateAbility || !ab) return "";
   const title = `${escapeHtml(ab.chineseName)}（${escapeHtml(ab.officialName)}）`;
   if (!ab.isMine) {
     return `<div class="pirate-ability-overlay" role="status">

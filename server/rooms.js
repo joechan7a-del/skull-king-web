@@ -53,6 +53,8 @@ export class RoomManager {
       lastActivity: Date.now(),
       timer: null,
       continuing: new Set(),
+      trickExplanationShown: false,
+      abilityPromptShown: false,
     };
     const player = this._addHuman(room, name, true);
     room.hostId = player.id;
@@ -268,11 +270,15 @@ export class RoomManager {
 
   usePirateAbility(room, playerId, choice = {}) {
     if (!room.game) return { error: "遊戲尚未開始。" };
+    if (room.game.pendingAbility && !room.abilityPromptShown) {
+      return { error: "請先睇完呢個回合結果。" };
+    }
     const result = room.game.usePirateAbility(playerId, choice);
     if (result.error) return result;
     this.touch(room);
-    if (!room.game.pendingAbility && room.game.phase === PHASE.TRICK_RESULT && room.trickExplanationShown) {
+    if (!room.game.pendingAbility && room.game.phase === PHASE.TRICK_RESULT && room.abilityPromptShown) {
       this._clearTimer(room);
+      room.abilityPromptShown = false;
       const next = room.game.advanceTrickResult();
       if (next.error) return next;
     }
@@ -283,9 +289,18 @@ export class RoomManager {
   continueRound(room, playerId) {
     if (!room.game) return { error: "遊戲尚未開始。" };
     if (room.game.phase === PHASE.TRICK_RESULT) {
-      if (room.game.pendingAbility) return { error: "請先使用海盜能力。" };
+      if (room.abilityPromptShown && room.game.pendingAbility) {
+        return { error: "請先使用海盜能力。" };
+      }
       if (!room.trickExplanationShown) return { ok: true, waiting: true };
       this._clearTimer(room);
+      if (room.game.pendingAbility) {
+        room.trickExplanationShown = false;
+        room.abilityPromptShown = true;
+        this.touch(room);
+        this.schedule(room);
+        return { ok: true, abilityPrompt: true };
+      }
       const result = room.game.advanceTrickResult();
       if (result.error) return result;
       this.touch(room);
@@ -322,8 +337,12 @@ export class RoomManager {
   _syncTrickExplanation(room, prevPhase) {
     if (room.game?.phase === PHASE.TRICK_RESULT && prevPhase !== PHASE.TRICK_RESULT) {
       room.trickExplanationShown = false;
+      room.abilityPromptShown = false;
     }
-    if (room.game?.phase !== PHASE.TRICK_RESULT) room.trickExplanationShown = false;
+    if (room.game?.phase !== PHASE.TRICK_RESULT) {
+      room.trickExplanationShown = false;
+      room.abilityPromptShown = false;
+    }
   }
 
   schedule(room) {
@@ -331,39 +350,50 @@ export class RoomManager {
     const game = room.game;
     if (!game) return;
     if (game.phase === PHASE.TRICK_RESULT) {
-      if (!room.trickExplanationShown) {
+      if (!room.trickExplanationShown && !room.abilityPromptShown) {
         const delay = trickReviewDelayMs(game);
         room.timer = setTimeout(() => {
           if (!room.game || room.game.phase !== PHASE.TRICK_RESULT) return;
           room.trickExplanationShown = true;
+          room.abilityPromptShown = false;
           this.broadcast(room);
           this.schedule(room);
         }, delay);
         return;
       }
-      if (game.pendingAbility) {
+      if (room.trickExplanationShown && !room.abilityPromptShown) {
+        room.timer = setTimeout(() => {
+          if (!room.game || room.game.phase !== PHASE.TRICK_RESULT) return;
+          if (room.game.pendingAbility) {
+            room.trickExplanationShown = false;
+            room.abilityPromptShown = true;
+            this.broadcast(room);
+            this.schedule(room);
+            return;
+          }
+          room.trickExplanationShown = false;
+          room.abilityPromptShown = false;
+          room.game.advanceTrickResult();
+          this.broadcast(room);
+          this.schedule(room);
+        }, TRICK_PAUSE_MS);
+        return;
+      }
+      if (room.abilityPromptShown && game.pendingAbility) {
         const actor = game.players[game.pendingAbility.playerIndex];
         if (actor?.isAI) {
           room.timer = setTimeout(() => {
             if (!room.game || room.game.phase !== PHASE.TRICK_RESULT || !room.game.pendingAbility) return;
+            if (!room.abilityPromptShown) return;
             room.game.stepPirateAbilityAI();
+            room.abilityPromptShown = false;
+            room.game.advanceTrickResult();
             this.broadcast(room);
             this.schedule(room);
           }, AI_PAUSE_MS);
         }
         return;
       }
-      room.timer = setTimeout(() => {
-        if (!room.game || room.game.phase !== PHASE.TRICK_RESULT) return;
-        if (room.game.pendingAbility) {
-          this.schedule(room);
-          return;
-        }
-        room.trickExplanationShown = false;
-        room.game.advanceTrickResult();
-        this.broadcast(room);
-        this.schedule(room);
-      }, TRICK_PAUSE_MS);
       return;
     }
     if (game.phase === PHASE.PLAYING) {
@@ -420,7 +450,8 @@ export class RoomManager {
       ...base,
       ...room.game.viewFor(playerId),
       ...this._continueView(room),
-      showTrickExplanation: !!(room.game.phase === PHASE.TRICK_RESULT && room.trickExplanationShown),
+      showTrickExplanation: !!(room.game.phase === PHASE.TRICK_RESULT && room.trickExplanationShown && !room.abilityPromptShown),
+      showPirateAbility: !!(room.game.phase === PHASE.TRICK_RESULT && room.abilityPromptShown && room.game.pendingAbility),
     };
   }
 

@@ -122,98 +122,13 @@ export function cardFaceLabel(card, { tigressAsPirate = null } = {}) {
 }
 
 
-/** Modest, distinct idle motions for the painted character in the enlarged preview only. */
-/** Art-file stem -> [kind, duration, x, y, rot, scale]. Each face is unique. */
-export const PREVIEW_IDLE = {
-  "yellow-1":  ["breath", "2.70s", "0%", "-0.50%", "0.20deg", "1.010"],
-  "yellow-2":  ["sway",   "2.85s", "0.55%", "-0.15%", "0.55deg", "1.000"],
-  "yellow-3":  ["lean",   "3.05s", "0.25%", "0.10%", "0.70deg", "1.000"],
-  "yellow-4":  ["shift",  "2.55s", "0.70%", "0.05%", "-0.35deg", "1.000"],
-  "yellow-5":  ["nod",    "2.40s", "0%", "0.55%", "0.30deg", "1.000"],
-  "yellow-6":  ["ready",  "2.25s", "0.15%", "0.40%", "-0.40deg", "1.008"],
-  "yellow-7":  ["drift",  "3.20s", "0.35%", "-0.35%", "0.25deg", "1.000"],
-  "yellow-8":  ["breath", "3.00s", "0.10%", "-0.65%", "-0.15deg", "1.012"],
-  "yellow-9":  ["sway",   "2.50s", "-0.60%", "0.10%", "-0.60deg", "1.000"],
-  "yellow-10": ["lean",   "2.80s", "-0.30%", "0.15%", "-0.75deg", "1.000"],
-  "yellow-11": ["shift",  "3.15s", "-0.55%", "-0.10%", "0.40deg", "1.000"],
-  "yellow-12": ["nod",    "2.65s", "0.10%", "0.45%", "-0.25deg", "1.000"],
-  "yellow-13": ["ready",  "2.35s", "-0.20%", "0.35%", "0.45deg", "1.007"],
-  "yellow-14": ["drift",  "3.40s", "-0.30%", "-0.40%", "-0.20deg", "1.000"],
-  "green-1":   ["sway",   "2.75s", "0.50%", "-0.20%", "0.50deg", "1.000"],
-  "green-2":   ["lean",   "2.95s", "0.35%", "0.05%", "0.65deg", "1.000"],
-  "green-3":   ["shift",  "2.45s", "0.65%", "0.15%", "-0.30deg", "1.000"],
-  "green-4":   ["nod",    "2.60s", "-0.05%", "0.50%", "0.35deg", "1.000"],
-  "green-5":   ["ready",  "2.20s", "0.20%", "0.45%", "-0.50deg", "1.009"],
-  "green-6":   ["drift",  "3.10s", "0.40%", "-0.30%", "0.20deg", "1.000"],
-  "green-7":   ["breath", "2.90s", "-0.05%", "-0.60%", "0.10deg", "1.011"],
-  "green-8":   ["sway",   "3.25s", "-0.50%", "0.05%", "-0.55deg", "1.000"],
-  "green-9":   ["lean",   "2.55s", "-0.25%", "0.20%", "-0.80deg", "1.000"],
-  "green-10":  ["shift",  "2.80s", "-0.70%", "0%", "0.35deg", "1.000"],
-  "green-11":  ["nod",    "3.00s", "0.15%", "0.40%", "-0.20deg", "1.000"],
-  "green-12":  ["ready",  "2.30s", "0.25%", "0.30%", "0.55deg", "1.008"],
-  "green-13":  ["drift",  "3.35s", "-0.35%", "-0.45%", "-0.25deg", "1.000"],
-  "green-14":  ["breath", "2.65s", "0.05%", "-0.55%", "-0.10deg", "1.010"],
-  "purple-1":  ["lean",   "2.85s", "0.20%", "0.10%", "0.60deg", "1.000"],
-  "purple-2":  ["shift",  "3.05s", "0.60%", "-0.05%", "-0.40deg", "1.000"],
-  "purple-3":  ["nod",    "2.50s", "0%", "0.60%", "0.25deg", "1.000"],
-  "purple-4":  ["ready",  "2.40s", "-0.15%", "0.40%", "0.40deg", "1.007"],
-  "purple-5":  ["drift",  "3.00s", "0.30%", "-0.40%", "0.30deg", "1.000"],
-  "purple-6":  ["breath", "2.75s", "0.15%", "-0.70%", "0.15deg", "1.012"],
-  "purple-7":  ["sway",   "2.35s", "0.65%", "0%", "0.70deg", "1.000"],
-  "purple-8":  ["lean",   "3.20s", "-0.35%", "0.10%", "-0.65deg", "1.000"],
-  "purple-9":  ["shift",  "2.60s", "-0.50%", "0.15%", "0.30deg", "1.000"],
-  "purple-10": ["nod",    "2.90s", "-0.10%", "0.45%", "-0.30deg", "1.000"],
-  "purple-11": ["ready",  "2.15s", "0.30%", "0.35%", "-0.45deg", "1.009"],
-  "purple-12": ["drift",  "3.45s", "-0.40%", "-0.25%", "0.15deg", "1.000"],
-  "purple-13": ["breath", "3.10s", "-0.10%", "-0.50%", "-0.20deg", "1.011"],
-  "purple-14": ["sway",   "2.70s", "-0.55%", "-0.15%", "-0.50deg", "1.000"],
-  "black-1":   ["shift",  "2.90s", "0.45%", "0.10%", "-0.25deg", "1.000"],
-  "black-2":   ["nod",    "2.55s", "0.05%", "0.50%", "0.40deg", "1.000"],
-  "black-3":   ["ready",  "2.30s", "-0.25%", "0.40%", "0.50deg", "1.008"],
-  "black-4":   ["drift",  "3.15s", "0.25%", "-0.35%", "-0.15deg", "1.000"],
-  "black-5":   ["breath", "2.80s", "0%", "-0.60%", "0.25deg", "1.010"],
-  "black-6":   ["sway",   "3.00s", "0.45%", "0.15%", "0.45deg", "1.000"],
-  "black-7":   ["lean",   "2.45s", "0.40%", "0%", "0.80deg", "1.000"],
-  "black-8":   ["shift",  "2.65s", "-0.65%", "-0.10%", "0.45deg", "1.000"],
-  "black-9":   ["nod",    "3.20s", "0.10%", "0.35%", "-0.35deg", "1.000"],
-  "black-10":  ["ready",  "2.20s", "0.20%", "0.50%", "-0.35deg", "1.009"],
-  "black-11":  ["drift",  "3.30s", "-0.25%", "-0.50%", "0.20deg", "1.000"],
-  "black-12":  ["breath", "2.50s", "0.20%", "-0.45%", "-0.15deg", "1.011"],
-  "black-13":  ["sway",   "2.85s", "-0.40%", "0.20%", "-0.65deg", "1.000"],
-  "black-14":  ["lean",   "3.00s", "0.15%", "0.20%", "0.55deg", "1.000"],
-  "black-14-1":["ready",  "2.50s", "-0.20%", "0.30%", "-0.55deg", "1.008"],
-  "escape":    ["drift",  "3.30s", "0.30%", "-0.30%", "0.20deg", "1.000"],
-  "tigress-0": ["ready",  "2.25s", "0.20%", "0.40%", "-0.50deg", "1.009"],
-  "tigress-1": ["ready",  "2.45s", "-0.25%", "0.35%", "0.45deg", "1.008"],
-  "skullKing": ["lean",   "3.10s", "0.20%", "0.15%", "0.70deg", "1.000"],
-  "mermaid-0": ["drift",  "3.50s", "0.40%", "-0.35%", "0.25deg", "1.000"],
-  "mermaid-1": ["nod",    "2.95s", "0%", "0.40%", "0.20deg", "1.000"],
-  "kraken":    ["shift",  "2.70s", "0.50%", "0.10%", "-0.30deg", "1.000"],
-  "whiteWhale":["breath", "3.60s", "0%", "-0.45%", "0.10deg", "1.010"],
-  "pirate-0":  ["lean",   "2.75s", "0.25%", "0.20%", "0.60deg", "1.000"],
-  "pirate-1":  ["shift",  "2.55s", "0.55%", "0.15%", "-0.40deg", "1.000"],
-  "pirate-2":  ["sway",   "3.15s", "-0.45%", "0.10%", "-0.55deg", "1.000"],
-  "pirate-3":  ["ready",  "2.20s", "0.15%", "0.45%", "0.40deg", "1.009"],
-  "pirate-4":  ["nod",    "2.85s", "-0.10%", "0.50%", "-0.25deg", "1.000"],
-};
-
-export function artFileStem(card) {
-  const src = cardArtUrl(card);
-  return src.replace(/^\/cards\//, "").replace(/\.webp$/, "");
-}
-
-export function previewIdleFor(card) {
-  return PREVIEW_IDLE[artFileStem(card)] || null;
-}
-
-export function cardFaceHTML(card, { dimmed = false, tigressAsPirate = null, compact = false, preview = false } = {}) {
+export function cardFaceHTML(card, { dimmed = false, tigressAsPirate = null, compact = false } = {}) {
   const cls = [
     "sk-card",
     "has-art",
     kindClass(card),
     dimmed ? "dimmed" : "",
     compact ? "compact" : "",
-    preview ? "is-preview" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -223,18 +138,9 @@ export function cardFaceHTML(card, { dimmed = false, tigressAsPirate = null, com
   const declared = card.special === "tigress" && tigressAsPirate != null
     ? `<span class="sk-card-flag">${tigressAsPirate ? "當海盜" : "當逃脫"}</span>`
     : "";
-  let idle = "";
-  if (preview) {
-    const spec = previewIdleFor(card);
-    if (spec) {
-      const [kind, dur, x, y, rot, scale] = spec;
-      idle = `<div class="sk-char-idle-clip" aria-hidden="true"><img class="sk-char-idle sk-idle-${escapeAttr(kind)}" src="${escapeAttr(src)}" alt="" draggable="false" width="784" height="1100" style="--idle-x:${escapeAttr(x)};--idle-y:${escapeAttr(y)};--idle-rot:${escapeAttr(rot)};--idle-s:${escapeAttr(scale)};animation-duration:${escapeAttr(dur)}"></div>`;
-    }
-  }
   return `<div class="${cls}" data-id="${escapeAttr(card.id)}" role="img" aria-label="${escapeAttr(label)}">
     <div class="sk-card-inner">
       <img class="sk-card-art" src="${escapeAttr(src)}" alt="${escapeAttr(label)}" draggable="false" width="784" height="1100">
-      ${idle}
       ${declared}
     </div>
   </div>`;
