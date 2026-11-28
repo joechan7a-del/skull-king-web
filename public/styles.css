@@ -464,8 +464,8 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   --cue-reserve: 60px;
   padding-top: calc(6px + var(--safe-top));
   padding-bottom: calc(6px + var(--safe-bottom));
-  padding-left: 10px;
-  padding-right: 10px;
+  padding-left: 12px;
+  padding-right: 12px;
   overflow: hidden;
 }
 .table-top-slot {
@@ -542,7 +542,7 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   min-height: 148px;
   max-height: none;
   margin: 2px 0 var(--dock-reserve, 208px) 0;
-  padding: 32px 18px 44px;
+  padding: 32px 32px 44px;
   container-type: size;
   display: grid;
   place-items: center;
@@ -553,8 +553,9 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   width: 100%;
   height: 100%;
   max-width: 100%;
+  margin-inline: auto;
   overflow: visible;
-  --card-in: clamp(58px, 14cqh, 70px);
+  --card-in: clamp(66px, 15cqh, 80px);
 }
 .table-felt {
   position: absolute;
@@ -942,7 +943,7 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   font: inherit;
 }
 .seat-card .sk-card {
-  width: 46px;
+  width: 54px;
   height: auto;
   aspect-ratio: 784 / 1100;
   border-radius: 8px;
@@ -982,20 +983,23 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   background: #9b3b2a;
   color: #fff4e8;
 }
-/* Restrained iMessage Slam: quick enlarge, short impact, tiny shake. No screen shake. */
-.seat-card.slam .sk-card {
-  animation: card-slam 0.4s cubic-bezier(0.2, 0.8, 0.25, 1);
+/* Modest special-play slam: a short zoom and settle, clearly smaller than a full-screen iMessage Slam. Number cards stay still. */
+.seat-card.special-slam {
+  z-index: 12;
+}
+.seat-card.special-slam .sk-card {
+  animation: special-slam 0.52s cubic-bezier(0.2, 0.8, 0.25, 1);
   transform-origin: center center;
   aspect-ratio: 784 / 1100;
   height: auto;
   border-radius: 8px;
 }
-@keyframes card-slam {
-  0%   { transform: scale(1.28) translateY(-8px); }
-  38%  { transform: scale(0.98) translateY(1px); }
-  55%  { transform: scale(1.05) translateX(1.5px); }
-  72%  { transform: scale(1.01) translateX(-1px); }
-  100% { transform: scale(1) translate(0, 0); }
+@keyframes special-slam {
+  0%   { transform: scale(1.72) rotate(-3.2deg) translateY(-8px); }
+  34%  { transform: scale(0.96) rotate(1deg) translateY(2px); }
+  55%  { transform: scale(1.08) rotate(-0.7deg) translateX(2px); }
+  76%  { transform: scale(1.02) rotate(0.3deg) translateX(-1px); }
+  100% { transform: scale(1) rotate(0) translate(0, 0); }
 }
 .seat-win {
   position: absolute;
@@ -1008,18 +1012,18 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   text-shadow: 0 1px 2px rgba(0,0,0,0.6);
 }
 .card-slot {
-  width: 54px;
+  width: 62px;
   height: auto;
   aspect-ratio: 784 / 1100;
   border-radius: 7px;
   border: 1.5px dashed rgba(255, 255, 255, 0.16);
   background: rgba(0, 0, 0, 0.12);
 }
-.circle-table.n-5, .circle-table.n-6 { --card-in: clamp(58px, 14cqh, 72px); }
+.circle-table.n-5, .circle-table.n-6 { --card-in: clamp(66px, 15cqh, 80px); }
 .circle-table.n-5 .seat-card .sk-card,
 .circle-table.n-6 .seat-card .sk-card,
 .circle-table.n-5 .card-slot,
-.circle-table.n-6 .card-slot { width: 52px; }
+.circle-table.n-6 .card-slot { width: 60px; }
 
 .seat-meta {
   position: absolute;
@@ -1048,13 +1052,13 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   clip: rect(0, 0, 0, 0);
 }
 .seat.place-left .seat-meta {
-  right: 22px;
+  right: 16px;
   top: 0;
   transform: translateY(-50%);
   text-align: right;
 }
 .seat.place-right .seat-meta {
-  left: 22px;
+  left: 16px;
   top: 0;
   transform: translateY(-50%);
   text-align: left;
@@ -1351,7 +1355,7 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
 .sk-card.dimmed { opacity: 0.62; }
 
 .sk-card.has-art .sk-card-inner {
-  background: #120e0a;
+  background: transparent;
   padding: 0;
 }
 .sk-card-art {
@@ -1748,13 +1752,13 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(237, 191, 89
   .sk-card { width: 84px; }
   .brand-cover { width: min(168px, 26vw); max-height: min(24svh, 200px); }
   .brand-cover img { max-height: min(24svh, 200px); }
-  .seat-card .sk-card, .card-slot { width: 68px; }
-  .circle-table { --card-in: clamp(66px, 16cqh, 80px); }
-  .circle-table.n-5, .circle-table.n-6 { --card-in: clamp(62px, 15cqh, 76px); }
+  .seat-card .sk-card, .card-slot { width: 76px; }
+  .circle-table { --card-in: clamp(74px, 17cqh, 88px); }
+  .circle-table.n-5, .circle-table.n-6 { --card-in: clamp(72px, 16cqh, 86px); }
   .circle-table.n-5 .seat-card .sk-card,
   .circle-table.n-6 .seat-card .sk-card,
   .circle-table.n-5 .card-slot,
-  .circle-table.n-6 .card-slot { width: 62px; }
+  .circle-table.n-6 .card-slot { width: 70px; }
   .seat .avatar { width: 36px; height: 36px; }
 }
 
@@ -2810,14 +2814,14 @@ body.dragging-card { cursor: grabbing; }
   .a2hs-tip { display: none; }
   .footer-note { display: none; }
   .bid-grid button { min-height: 44px; }
-  .circle-wrap { padding: 24px 14px 36px; }
-  .circle-table { --card-in: clamp(54px, 13cqh, 64px); }
-  .circle-table.n-5, .circle-table.n-6 { --card-in: clamp(52px, 13cqh, 60px); }
-  .seat-card .sk-card, .card-slot { width: 52px; }
+  .circle-wrap { padding: 22px 30px 36px; }
+  .circle-table { --card-in: clamp(60px, 14cqh, 70px); }
+  .circle-table.n-5, .circle-table.n-6 { --card-in: clamp(60px, 14cqh, 68px); }
+  .seat-card .sk-card, .card-slot { width: 58px; }
   .circle-table.n-5 .seat-card .sk-card,
   .circle-table.n-6 .seat-card .sk-card,
   .circle-table.n-5 .card-slot,
-  .circle-table.n-6 .card-slot { width: 46px; }
+  .circle-table.n-6 .card-slot { width: 54px; }
 
 }
 
@@ -2872,9 +2876,9 @@ body.dragging-card { cursor: grabbing; }
 .seat-card { isolation: isolate; }
 
 @media (max-height: 800px) and (min-height: 621px) {
-  .circle-wrap { padding: 32px 16px 48px; }
-  .circle-table { --card-in: clamp(58px, 14cqh, 70px); }
-  .circle-table.n-5, .circle-table.n-6 { --card-in: clamp(56px, 13cqh, 66px); }
+  .circle-wrap { padding: 32px 30px 48px; }
+  .circle-table { --card-in: clamp(66px, 15cqh, 78px); }
+  .circle-table.n-5, .circle-table.n-6 { --card-in: clamp(66px, 15cqh, 76px); }
   .table-status-chip, .last-trick-cue { font-size: 12px; padding: 3px 10px; }
   .my-bid-track { margin: 0 0 4px; }
 }
@@ -2959,4 +2963,82 @@ body.dragging-card { cursor: grabbing; }
 
 @media (prefers-reduced-motion: reduce) {
   .your-turn-hint { animation: none; }
+}
+
+/* Enlarged-preview character idle: the painted figure moves a little; badges and frame stay still. */
+.sk-char-idle-clip {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  -webkit-mask-image: radial-gradient(ellipse 56% 52% at 50% 48%, #000 0 58%, transparent 78%);
+  mask-image: radial-gradient(ellipse 56% 52% at 50% 48%, #000 0 58%, transparent 78%);
+}
+.sk-char-idle {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  pointer-events: none;
+  transform-origin: 50% 62%;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+.sk-idle-breath {
+  animation-name: char-idle-breath;
+}
+.sk-idle-sway {
+  animation-name: char-idle-sway;
+}
+.sk-idle-lean {
+  animation-name: char-idle-lean;
+}
+.sk-idle-shift {
+  animation-name: char-idle-shift;
+}
+.sk-idle-nod {
+  animation-name: char-idle-nod;
+}
+.sk-idle-ready {
+  animation-name: char-idle-ready;
+}
+.sk-idle-drift {
+  animation-name: char-idle-drift;
+}
+@keyframes char-idle-breath {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(var(--idle-x, 0), var(--idle-y, -0.5%)) scale(var(--idle-s, 1.01)); }
+}
+@keyframes char-idle-sway {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  50% { transform: translate(var(--idle-x, 0.5%), var(--idle-y, 0)) rotate(var(--idle-rot, 0.5deg)); }
+}
+@keyframes char-idle-lean {
+  0%, 100% { transform: rotate(0deg) translate(0, 0); }
+  40% { transform: rotate(var(--idle-rot, 0.6deg)) translate(var(--idle-x, 0.2%), var(--idle-y, 0.1%)); }
+  55% { transform: rotate(var(--idle-rot, 0.6deg)) translate(var(--idle-x, 0.2%), var(--idle-y, 0.1%)); }
+}
+@keyframes char-idle-shift {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  50% { transform: translate(var(--idle-x, 0.55%), var(--idle-y, 0)) rotate(var(--idle-rot, -0.3deg)); }
+}
+@keyframes char-idle-nod {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  35% { transform: translate(0, var(--idle-y, 0.45%)) rotate(var(--idle-rot, 0.3deg)); }
+}
+@keyframes char-idle-ready {
+  0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+  30% { transform: translate(var(--idle-x, 0.15%), var(--idle-y, 0.35%)) rotate(var(--idle-rot, -0.4deg)) scale(var(--idle-s, 1.008)); }
+  55% { transform: translate(calc(var(--idle-x, 0.15%) * 0.4), calc(var(--idle-y, 0.35%) * 0.4)) rotate(0deg) scale(1); }
+}
+@keyframes char-idle-drift {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  50% { transform: translate(var(--idle-x, 0.3%), var(--idle-y, -0.35%)) rotate(var(--idle-rot, 0.2deg)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seat-card.special-slam .sk-card,
+  .sk-char-idle { animation: none; }
 }

@@ -9,7 +9,7 @@ const EMPTY_TTL_MS = 20 * 60 * 1000;
 const TRICK_PAUSE_MS = 4000; // time to read the explanation after it appears; do not shorten
 const AI_PAUSE_MS = 1200; // plays only (bids stay immediate); easier to follow, not sluggish
 /** Time for the match-start “who leads first” draw before an AI may play. */
-export const OPENING_DRAW_MS = 2200;
+export const OPENING_DRAW_MS = 1100;
 /** Look-at-the-completed-trick beat before the winner/void overlay. Mid of the requested 1.5–2s. */
 export const TRICK_REVIEW_MS = 1800;
 /** Matches the client flourish banner length in public/app.js (maybeSpecialFlourish). */

@@ -1015,12 +1015,12 @@ function maybeStartOpeningDraw(v) {
       state.openingDrawHiddenKey = key;
       state.openingDrawTimer = 0;
       render();
-    }, 700);
+    }, 400);
     return;
   }
   let tick = 0;
-  const interval = 90;
-  const ticks = 16; // ~1440ms of cycling, then 800ms landed (~2200ms total)
+  const interval = 85;
+  const ticks = 7; // ~595ms of cycling, then 420ms landed (~1015ms total)
   const step = () => {
     if (state.openingDrawKey !== key) return;
     tick++;
@@ -1033,7 +1033,7 @@ function maybeStartOpeningDraw(v) {
         state.openingDrawHiddenKey = key;
         state.openingDrawTimer = 0;
         render();
-      }, 800);
+      }, 420);
       return;
     }
     state.openingDrawSpinName = names[(tick - 1) % names.length];
@@ -1082,7 +1082,7 @@ function seatRadii(n) {
   if (n <= 2) return { rx: 0, ry: 36 };
   if (n === 3) return { rx: 36, ry: 37 };
   if (n === 4) return { rx: 36, ry: 38 };
-  if (n === 5) return { rx: 42, ry: 43 };
+  if (n === 5) return { rx: 34, ry: 42 };
   return { rx: 40, ry: 39 };
 }
 
@@ -2055,7 +2055,7 @@ function inspectHTML() {
   return `<div class="overlay center" data-act="close-inspect">
     <div class="sheet inspect-sheet inspect-card-sheet" data-stop="1" data-sheet-dismiss="close-inspect">
       ${sheetHandleHTML()}
-      <div class="inspect-card${ins.why ? " illegal-shake" : ""}">${cardFaceHTML(card, { tigressAsPirate: ins.tigressAsPirate })}</div>
+      <div class="inspect-card${ins.why ? " illegal-shake" : ""}">${cardFaceHTML(card, { tigressAsPirate: ins.tigressAsPirate, preview: true })}</div>
       <h2>${escapeHtml(title)}</h2>
       <p>${escapeHtml(help)}</p>
       ${ins.why ? `<p class="why-line">${escapeHtml(ins.why)}</p>` : ""}
@@ -2390,7 +2390,7 @@ function isJustPlayed(cardId) {
   state.seenTrickCardIds.add(cardId);
   state.animatingPlayIds.add(cardId);
   playCardFlip();
-  setTimeout(() => state.animatingPlayIds.delete(cardId), 500);
+  setTimeout(() => state.animatingPlayIds.delete(cardId), 600);
   return true;
 }
 
@@ -2437,7 +2437,7 @@ function circleTableHTML(v) {
         maybeSpecialFlourish(played);
         if (!isMe) haptic(10);
       }
-      const slam = justPlayed ? " slam" : "";
+      const slam = justPlayed && played.card.special ? " special-slam" : "";
       if (justPlayed && !isMe) arriveFlag = true;
       const voidCause = destroyed && isVoidCausePlay(played);
       const midLead = (v.phase === "playing" || v.phase === "choosingTigress")

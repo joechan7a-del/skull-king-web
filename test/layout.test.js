@@ -62,7 +62,7 @@ test("the felt keeps a locked mid-trick proportion on every in-game screen", () 
   assert.match(render, /circleTableHTML\(v\)/);
   const dockChunk = render.slice(render.indexOf("table-dock"), render.indexOf("pendingTigress"));
   assert.doesNotMatch(dockChunk, /circleTableHTML/);
-  assert.match(html, /app\.js\?v=c27/);
+  assert.match(html, /app\.js\?v=c28/);
   // overlays must stay out of the table flex flow
   assert.match(css, /\.confirm-bar\s*\{[^}]*position:\s*absolute/s);
   const banner = block(css, ".banner");
@@ -197,7 +197,7 @@ test("trick and round results are overlay dialogs and do not shrink the table", 
   const score = js.slice(js.indexOf("function scoreHTML"), js.indexOf("function renderRules"));
   assert.match(score, /class="overlay center"/);
   assert.match(score, /下一局/);
-  assert.match(html, /app\.js\?v=c27/);
+  assert.match(html, /app\.js\?v=c28/);
 });
 
 test("AI plays and post-win pauses are modestly longer", () => {
@@ -331,9 +331,9 @@ test("rules copy describes the 74-card house deck", () => {
   assert.doesNotMatch(js, /牌組 72 張：/);
 });
 
-test("cache bust is c27 and the site uses a licensed HK webfont", () => {
-  assert.match(html, /app\.js\?v=c27/);
-  assert.match(html, /styles\.css\?v=c27/);
+test("cache bust is c28 and the site uses a licensed HK webfont", () => {
+  assert.match(html, /app\.js\?v=c28/);
+  assert.match(html, /styles\.css\?v=c28/);
   assert.match(html, /fonts\.googleapis\.com/);
   assert.match(html, /Chiron\+Hei\+HK/);
   assert.match(css, /"Chiron Hei HK"/);
@@ -447,11 +447,11 @@ test("輪到你出牌 sits in the hand tray and pulses, not in the top cue row",
   assert.match(css, /\.hand-tray-mid/);
 });
 
-test("preview, hand, and table cards are static still images with no card animation", () => {
+test("hand and table faces stay still; only the enlarged preview has modest per-character idle motion", () => {
   const inspectFn = js.slice(js.indexOf("function inspectHTML"), js.indexOf("function renderHome"));
-  assert.doesNotMatch(inspectFn, /animated:\s*true/);
+  assert.match(inspectFn, /preview:\s*true/);
+  assert.equal((js.match(/preview:\s*true/g) || []).length, 1);
   assert.doesNotMatch(js, /animated:\s*true/);
-  assert.doesNotMatch(cards, /animated = false/);
   assert.doesNotMatch(cards, /sk-card-bob/);
   assert.doesNotMatch(cards, /sk-card-vfx/);
   assert.doesNotMatch(cards, /is-preview-live/);
@@ -460,6 +460,91 @@ test("preview, hand, and table cards are static still images with no card animat
   assert.doesNotMatch(css, /sk-card-bob/);
   assert.doesNotMatch(js, /\.gif/i);
   assert.doesNotMatch(cards, /\.gif/i);
+  assert.match(cards, /export const PREVIEW_IDLE/);
+  assert.match(css, /\.sk-char-idle-clip/);
+  assert.match(css, /@keyframes char-idle-breath/);
+  assert.match(css, /@keyframes char-idle-sway/);
+  assert.match(css, /@keyframes char-idle-lean/);
+  assert.match(css, /@keyframes char-idle-shift/);
+  assert.match(css, /@keyframes char-idle-nod/);
+  assert.match(css, /@keyframes char-idle-ready/);
+  assert.match(css, /@keyframes char-idle-drift/);
+  const kinds = ["breath", "sway", "lean", "shift", "nod", "ready", "drift"];
+  const entries = [...cards.matchAll(/"([^"]+)":\s*\["(breath|sway|lean|shift|nod|ready|drift)",\s*"([0-9.]+s)",\s*"([^"]+)",\s*"([^"]+)",\s*"([^"]+)",\s*"([^"]+)"\]/g)];
+  assert.equal(entries.length, 70, `expected 70 preview idles, got ${entries.length}`);
+  const stems = new Set();
+  const sigs = new Set();
+  const used = new Set();
+  for (const [, stem, kind, ...rest] of entries) {
+    assert.ok(!stems.has(stem), `duplicate idle for ${stem}`);
+    stems.add(stem);
+    used.add(kind);
+    const sig = [kind, ...rest].join("|");
+    assert.ok(!sigs.has(sig), `reused idle ${sig} on ${stem}`);
+    sigs.add(sig);
+  }
+  for (const kind of kinds) assert.ok(used.has(kind), `missing idle kind ${kind}`);
+  const expected = [];
+  for (const suit of ["yellow", "green", "purple"]) {
+    for (let r = 1; r <= 14; r++) expected.push(`${suit}-${r}`);
+  }
+  for (let r = 1; r <= 14; r++) expected.push(`black-${r}`);
+  expected.push("black-14-1", "escape", "tigress-0", "tigress-1", "skullKing", "mermaid-0", "mermaid-1", "kraken", "whiteWhale", "pirate-0", "pirate-1", "pirate-2", "pirate-3", "pirate-4");
+  assert.equal(expected.length, 70);
+  for (const name of expected) assert.ok(stems.has(name), `no idle for ${name}`);
+  // Hand / table / compact overlays do not opt into the idle layer.
+  const handCall = js.slice(js.indexOf("const inner = cardFaceHTML"), js.indexOf("const inner = cardFaceHTML") + 80);
+  assert.doesNotMatch(handCall, /preview:\s*true/);
+  const tablePlay = js.slice(js.indexOf("function seatCardHTML"), js.indexOf("function seatCardHTML") + 1800);
+  assert.doesNotMatch(tablePlay, /preview:\s*true/);
+});
+
+test("the five-player table stays centered and side seat info stays on screen", () => {
+  const wrap = block(css, ".circle-wrap");
+  assert.match(wrap, /padding:\s*32px 32px 44px/);
+  assert.match(css, /\.circle-wrap \{ padding: 22px 30px 36px; \}/);
+  assert.match(css, /\.circle-wrap \{ padding: 32px 30px 48px; \}/);
+  const fn = js.slice(js.indexOf("function seatRadii"), js.indexOf("function seatRadii") + 500);
+  assert.match(fn, /n === 5\) return \{ rx: 34, ry: 42 \}/);
+  const left = block(css, ".seat.place-left .seat-meta");
+  const right = block(css, ".seat.place-right .seat-meta");
+  assert.match(left, /right:\s*16px/);
+  assert.match(right, /left:\s*16px/);
+  const screen = block(css, ".table-screen");
+  assert.match(screen, /padding-left:\s*12px/);
+  assert.match(screen, /padding-right:\s*12px/);
+});
+
+test("table cards are larger than the previous 52px phone size, hand cards stay 76px", () => {
+  assert.match(css, /\.circle-table\.n-6 \.card-slot \{ width: 60px; \}/);
+  assert.match(css, /\.circle-table\.n-6 \.card-slot \{ width: 70px; \}/);
+  assert.match(css, /\.circle-table\.n-6 \.card-slot \{ width: 54px; \}/);
+  const hand = block(css, ".hand .sk-card");
+  assert.match(css, /width: 76px;/);
+  assert.doesNotMatch(block(css, ".hand"), /width:\s*60px/);
+});
+
+test("the opening-lead lottery is shorter but still drawn at random", () => {
+  const rooms = readFileSync(join(root, "server/rooms.js"), "utf8");
+  assert.match(rooms, /export const OPENING_DRAW_MS = 1100;/);
+  const draw = js.slice(js.indexOf("function maybeStartOpeningDraw"), js.indexOf("function openingDrawOverlayHTML"));
+  assert.match(draw, /const ticks = 7;/);
+  assert.match(draw, /const interval = 85;/);
+  assert.match(draw, /, 420\)/);
+  assert.match(js, /抽邊個出先/);
+  assert.match(draw, /openingLeaderName/);
+});
+
+test("playing a card does not flash black; only specials get a modest slam", () => {
+  const inner = block(css, ".sk-card.has-art .sk-card-inner");
+  assert.match(inner, /background:\s*transparent/);
+  assert.doesNotMatch(css, /#120e0a/);
+  assert.doesNotMatch(js, /justPlayed \? " slam"/);
+  assert.match(js, /justPlayed && played\.card\.special \? " special-slam"/);
+  assert.match(css, /@keyframes special-slam/);
+  const slam = css.slice(css.indexOf("@keyframes special-slam"), css.indexOf("@keyframes special-slam") + 500);
+  assert.match(slam, /scale\(1\.72\)/);
+  assert.doesNotMatch(css, /@keyframes card-slam/);
 });
 
 test("corner badges sit inside the frame and colour-suit ranks stay bold", () => {
