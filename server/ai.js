@@ -146,3 +146,39 @@ function trickExpectation(card, handSize) {
   if (card.rank >= 12) return handSize <= 3 ? 0.22 : 0.1;
   return 0;
 }
+
+/** Legal, modest AI choices for official 2021 pirate abilities. */
+export function choosePirateAbility({ id, player, players, cardsDealt, tricksLeft }) {
+  const bid = player.bid ?? 0;
+  const taken = player.tricksWon ?? 0;
+  if (id === "rosie") {
+    if (taken < bid) return { leaderIndex: players.findIndex((p) => p.id === player.id) };
+    const busted = players
+      .map((p, i) => ({ i, over: (p.tricksWon ?? 0) - (p.bid ?? 0) }))
+      .filter((x) => x.over > 0 && players[x.i].id !== player.id)
+      .sort((a, b) => b.over - a.over);
+    if (busted.length) return { leaderIndex: busted[0].i };
+    const self = players.findIndex((p) => p.id === player.id);
+    return { leaderIndex: self >= 0 ? self : 0 };
+  }
+  if (id === "bendt") {
+    const hand = [...(player.hand || [])];
+    const need = taken < bid;
+    hand.sort((a, b) => (need ? strength(a) - strength(b) : strength(b) - strength(a)));
+    return { discardIds: hand.slice(0, 2).map((c) => c.id) };
+  }
+  if (id === "rascal") {
+    const remaining = Math.max(0, Number(tricksLeft) || 0);
+    if (taken === bid && remaining === 0) return { bet: 20 };
+    if (taken === bid && remaining <= 1) return { bet: 10 };
+    if (Math.abs(taken - bid) > remaining) return { bet: taken === bid ? 20 : 0 };
+    return { bet: 0 };
+  }
+  if (id === "juanita") return { done: true };
+  if (id === "harry") {
+    if (taken === bid + 1 && bid > 0) return { delta: -1 };
+    if (taken === bid - 1 && bid < cardsDealt) return { delta: 1 };
+    return { delta: 0 };
+  }
+  return {};
+}

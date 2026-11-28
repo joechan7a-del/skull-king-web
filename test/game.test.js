@@ -3,7 +3,27 @@ import assert from "node:assert/strict";
 import { Game, PHASE, pickOpeningLeaderIndex } from "../server/game.js";
 import { scoreRound, winnerIndex, playedCard, makeSuit, makeSpecial } from "../server/rules.js";
 import { RoomManager, playHasFlourish, trickReviewDelayMs, TRICK_REVIEW_MS, FLOURISH_HOLD_MS, TRICK_PAUSE_MS } from "../server/rooms.js";
-import { AI_NAMES, pickAINames } from "../server/ai.js";
+import { AI_NAMES, pickAINames, choosePirateAbility } from "../server/ai.js";
+
+
+function settleTrick(g) {
+  if (g.phase !== PHASE.TRICK_RESULT) return;
+  if (g.pendingAbility) {
+    const actor = g.players[g.pendingAbility.playerIndex];
+    const result = actor.isAI
+      ? g.stepPirateAbilityAI()
+      : g.usePirateAbility(actor.id, choosePirateAbility({
+        id: g.pendingAbility.id,
+        player: actor,
+        players: g.players,
+        cardsDealt: g.cardsDealt,
+        tricksLeft: g.cardsDealt - g.tricksPlayed,
+      }));
+    assert.equal(result.ok, true, result.error);
+  }
+  const next = g.advanceTrickResult();
+  assert.equal(next.ok, true, next.error);
+}
 
 function seats(nHumans = 2, nAI = 2) {
   const s = [];
@@ -183,7 +203,7 @@ test("AI fills seats and can bid + play a whole round", () => {
   let guard = 0;
   while (g.phase !== PHASE.ROUND_RESULT && guard++ < 200) {
     if (g.phase === PHASE.TRICK_RESULT) {
-      g.advanceTrickResult();
+      settleTrick(g);
       continue;
     }
     if (g.phase === PHASE.CHOOSING_TIGRESS) {

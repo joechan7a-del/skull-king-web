@@ -1,3 +1,5 @@
+import { pirateAbilityByCopyIndex, pirateAbilityHelp } from "./pirates.js";
+
 const ICONS = {
   yellow: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 8h14l1.5 3H20v9H4v-9H3.5L5 8zm2 3v7h10v-7H7zm2-6h6l1 3H8l1-3z"/></svg>`,
   green: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4.5 14.5c2.8-1 6.2-4.8 7.2-8.6 2.8 1.6 4.6 4.4 4.6 7.2 0 .4 0 .8-.1 1.1 1.2-1.2 2.8-2.8 3.3-5.1 2.2 3.2.6 8-3.2 10.2-2.2 1.3-5 1.6-7.4.6-1.8-.8-3.8-3.4-4.4-5.4zM8 9.2c.8-1.6 2-3.2 3.4-4.4-.2 2.2-1.6 4.4-3.4 4.4z"/></svg>`,
@@ -55,7 +57,12 @@ export function cardHelpText(card, { tigressAsPirate = null } = {}) {
     if (card.special === "tigress" && tigressAsPirate === false) {
       return "呢張母老虎已宣布當逃脫：通常唔會贏回合。";
     }
-    return CARD_HELP[card.special] || "";
+    const base = CARD_HELP[card.special] || "";
+    if (card.special === "pirate") {
+      const extra = pirateAbilityHelp(pirateAbilityByCopyIndex(card.copyIndex ?? 0));
+      return extra ? `${base}${base ? " " : ""}${extra}` : base;
+    }
+    return base;
   }
   if (card?.suit) {
     const trump = card.suit === "black" ? "黑色骷髏旗係王牌，大過其他顏色嘅數字牌。" : "有花就要跟；黑色骷髏旗係王牌。";

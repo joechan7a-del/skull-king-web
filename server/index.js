@@ -153,6 +153,9 @@ function handle(ws, msg) {
     case "continueRound":
       result = rooms.continueRound(room, playerId);
       break;
+    case "usePirateAbility":
+      result = rooms.usePirateAbility(room, playerId, msg);
+      break;
     case "leave": {
       const dropSeat = !room.game;
       rooms.leave(room, playerId, { dropSeat });

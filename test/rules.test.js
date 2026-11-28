@@ -162,11 +162,11 @@ test("pirate captures two mermaids +40", () => {
 });
 
 test("scoring examples from rulebook", () => {
-  assert.deepEqual(scoreRound(3, 3, 3, 0), { bidPoints: 60, bonus: 0, total: 60 });
-  assert.deepEqual(scoreRound(2, 4, 5, 50), { bidPoints: -20, bonus: 0, total: -20 });
-  assert.deepEqual(scoreRound(0, 0, 7, 10), { bidPoints: 70, bonus: 10, total: 80 });
-  assert.deepEqual(scoreRound(0, 2, 9, 40), { bidPoints: -90, bonus: 0, total: -90 });
-  assert.deepEqual(scoreRound(1, 1, 4, 40), { bidPoints: 20, bonus: 40, total: 60 });
+  assert.deepEqual(scoreRound(3, 3, 3, 0), { bidPoints: 60, bonus: 0, rascalPoints: 0, total: 60 });
+  assert.deepEqual(scoreRound(2, 4, 5, 50), { bidPoints: -20, bonus: 0, rascalPoints: 0, total: -20 });
+  assert.deepEqual(scoreRound(0, 0, 7, 10), { bidPoints: 70, bonus: 10, rascalPoints: 0, total: 80 });
+  assert.deepEqual(scoreRound(0, 2, 9, 40), { bidPoints: -90, bonus: 0, rascalPoints: 0, total: -90 });
+  assert.deepEqual(scoreRound(1, 1, 4, 40), { bidPoints: 20, bonus: 40, rascalPoints: 0, total: 60 });
 });
 
 test("basic deck has 74 house-rule cards including two black 14s and two Tigresses, no loot", () => {

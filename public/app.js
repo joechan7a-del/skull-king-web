@@ -1,4 +1,5 @@
 import { cardFaceHTML, cardBackHTML, iconSVG, escapeHtml, CARD_HELP, SPECIAL_INFO, SUIT_INFO, cardHelpText, suitLabel, allCardArtUrls } from "./cards.js";
+import { pirateAbilityHelp } from "./pirates.js";
 
 const assetPreload = startAssetPreload();
 
@@ -82,6 +83,7 @@ const state = {
   bidValue: null,
   inspect: null,
   selectedCardId: null,
+  bendtDiscardIds: [],
   trickAnimReady: false,
   seenTrickCardIds: new Set(),
   animatingPlayIds: new Set(),
@@ -1082,7 +1084,7 @@ function seatRadii(n) {
   if (n <= 2) return { rx: 0, ry: 36 };
   if (n === 3) return { rx: 36, ry: 37 };
   if (n === 4) return { rx: 36, ry: 38 };
-  if (n === 5) return { rx: 34, ry: 42 };
+  if (n === 5) return { rx: 34, ry: 36 };
   return { rx: 40, ry: 39 };
 }
 
@@ -1549,6 +1551,12 @@ function onMessage(msg) {
       else if (state.selectedCardId && !(msg.legalCardIds || []).includes(state.selectedCardId)) {
         state.selectedCardId = null;
       }
+      if (!msg.pendingAbility || msg.pendingAbility.id !== "bendt" || !msg.pendingAbility.isMine) {
+        state.bendtDiscardIds = [];
+      } else {
+        const have = new Set((msg.myHand || []).map((c) => c.id));
+        state.bendtDiscardIds = state.bendtDiscardIds.filter((id) => have.has(id));
+      }
       maybeLobbyToasts(msg);
       maybeCelebrateMake(msg);
       maybeAnnounceTurn(msg);
@@ -1779,8 +1787,17 @@ app.addEventListener("click", (e) => {
   else if (act === "discard-session") discardSavedGame();
   else if (act === "inspect") {
     e.stopPropagation();
-    if (!e.target.closest(".card-info")) playCardFlip();
     const id = t.dataset.id;
+    if (view?.pendingAbility?.isMine && view.pendingAbility.id === "bendt" && t.closest(".hand")) {
+      const have = new Set(state.bendtDiscardIds);
+      if (have.has(id)) have.delete(id);
+      else if (have.size < 2) have.add(id);
+      state.bendtDiscardIds = [...have];
+      playCardFlip();
+      render();
+      return;
+    }
+    if (!e.target.closest(".card-info")) playCardFlip();
     if (t.closest(".hand .sk-wrap.inspect-only, .hand .sk-wrap.unplayable")) shakeIllegalCard(id);
     openInspect(id, t.dataset.why || "");
     return;
@@ -1898,6 +1915,14 @@ app.addEventListener("click", (e) => {
   else if (act === "tig-escape") send({ type: "resolveTigress", asPirate: false });
   else if (act === "tig-cancel") send({ type: "cancelTigress" });
   else if (act === "continue") send({ type: "continueRound" });
+  else if (act === "pirate-rosie") send({ type: "usePirateAbility", leaderIndex: Number(t.dataset.index) });
+  else if (act === "pirate-rascal") send({ type: "usePirateAbility", bet: Number(t.dataset.bet) });
+  else if (act === "pirate-harry") send({ type: "usePirateAbility", delta: Number(t.dataset.delta) });
+  else if (act === "pirate-juanita-done") send({ type: "usePirateAbility", done: true });
+  else if (act === "pirate-bendt-confirm") {
+    if (state.bendtDiscardIds.length !== 2) return;
+    send({ type: "usePirateAbility", discardIds: [...state.bendtDiscardIds] });
+  }
   else if (act === "play-again") send({ type: "playAgain" });
   else if (act === "back-lobby") send({ type: "backToLobby" });
 });
@@ -2264,8 +2289,8 @@ function isPlayerThinking(p, v) {
 function tableArrowsSVG() {
   const cx = 50;
   const cy = 50;
-  const rx = 17;
-  const ry = 15;
+  const rx = 18;
+  const ry = 18;
   const startDeg = 115;
   const sweepDeg = 302;
   const a0 = (startDeg * Math.PI) / 180;
@@ -2390,7 +2415,7 @@ function isJustPlayed(cardId) {
   state.seenTrickCardIds.add(cardId);
   state.animatingPlayIds.add(cardId);
   playCardFlip();
-  setTimeout(() => state.animatingPlayIds.delete(cardId), 600);
+  setTimeout(() => state.animatingPlayIds.delete(cardId), 1500);
   return true;
 }
 
@@ -2414,6 +2439,8 @@ function circleTableHTML(v) {
     const x = 50 + Math.cos(rad) * rx;
     const y = 50 + Math.sin(rad) * ry;
     const rot = i * (360 / n);
+    const cardUx = Math.cos(rad);
+    const cardUy = Math.sin(rad);
     const place = seatPlace(angleDeg);
     const played = trickByPlayer.get(playerIndex);
     let arriveFlag = false;
@@ -2460,7 +2487,7 @@ function circleTableHTML(v) {
     const featured = win || (destroyed && played && isVoidCausePlay(played));
     const z = bidLine.explode ? 8 : featured ? 7 : thinking ? 6 : 2;
     return `<div class="seat place-${place} ${thinking ? "thinking" : ""} ${isMe ? "is-me" : ""} ${win ? "winner" : ""}${celebrate}${arrive}${bustCls}${boomCls} ${p.isAI ? "ai-seat" : ""}"
-      style="left:${x.toFixed(2)}%;top:${y.toFixed(2)}%;--rot:${rot}deg;z-index:${z}">
+      style="left:${x.toFixed(2)}%;top:${y.toFixed(2)}%;--rot:${rot}deg;--seat-x:${x.toFixed(2)};--seat-y:${y.toFixed(2)};--card-ux:${cardUx.toFixed(4)};--card-uy:${cardUy.toFixed(4)};z-index:${z}">
       ${card}
       ${bidLine.explode ? `<div class="bust-burst" aria-hidden="true"></div>` : ""}
       ${scoreFloaterHTML(v, p.id, i)}
@@ -2797,6 +2824,14 @@ function renderTable() {
         tag += `<span class="card-tag last">最後</span>`;
       }
       const shaking = !isLegal && state.shakeCardId === c.id ? " illegal-shake" : "";
+      const bendtMine = v.pendingAbility?.isMine && v.pendingAbility.id === "bendt";
+      if (bendtMine) {
+        const picked = state.bendtDiscardIds.includes(c.id);
+        return `<div class="sk-wrap${picked ? " selected" : ""} playable bendt-pick${dealCls}" ${style.replace(`z-index:${selected ? 40 : i}`, `z-index:${picked ? 40 : i}`)}>
+          <button class="sk-play" data-act="inspect" data-id="${escapeHtml(c.id)}">${inner.replace("sk-card ", `sk-card legal ${picked ? "picked " : ""}`)}</button>
+          ${picked ? `<span class="card-tag special">棄</span>` : ""}${tag}
+        </div>`;
+      }
       if (isLegal) {
         return `<div class="sk-wrap${selected ? " selected" : ""} playable${dealCls}" ${style}>
           <button class="sk-play" data-act="inspect" data-id="${escapeHtml(c.id)}">${inner.replace("sk-card ", `sk-card legal ${selected ? "picked " : ""}`)}</button>
@@ -2852,6 +2887,7 @@ function renderTable() {
       ${trickResultOverlayHTML(v)}
     </div>
     ${v.pendingTigress ? tigressHTML() : ""}
+    ${pirateAbilityHTML(v)}
     ${v.phase === "roundResult" || v.phase === "gameOver" ? scoreHTML(v) : ""}
     ${scorePeekHTML(v)}
     ${prevTrickSheetHTML(v)}
@@ -2872,6 +2908,70 @@ function handOverlap(count) {
   if (need <= width) return 8;
   const overlap = -Math.ceil((need - width) / (count - 1));
   return Math.max(overlap, -(card - 38));
+}
+
+
+function pirateAbilityHTML(v) {
+  const ab = v?.pendingAbility;
+  if (!ab) return "";
+  const title = `${escapeHtml(ab.chineseName)}（${escapeHtml(ab.officialName)}）`;
+  if (!ab.isMine) {
+    return `<div class="pirate-ability-overlay" role="status">
+      <div class="pirate-ability-card">
+        <div class="pirate-ability-kicker">海盜能力</div>
+        <p>等${escapeHtml(ab.playerName || "對手")}使用${title}。</p>
+      </div>
+    </div>`;
+  }
+  let body = "";
+  if (ab.id === "rosie") {
+    const btns = (v.players || []).map((p, i) => {
+      const mine = p.id === v.yourId;
+      return `<button type="button" class="btn ${mine ? "btn-gold" : "btn-sheet"}" data-act="pirate-rosie" data-index="${i}">${escapeHtml(p.name)}${mine ? "（你）" : ""}</button>`;
+    }).join("");
+    body = `<p>揀邊個做下一回合嘅領牌（包括你自己）。</p><div class="pirate-ability-actions">${btns}</div>`;
+  } else if (ab.id === "bendt") {
+    const n = state.bendtDiscardIds.length;
+    const drawn = ab.drawnCount ?? 2;
+    body = `<p>已從未發嘅牌加咗 ${drawn} 張入手。請從手牌揀 2 張棄掉（${n}／2）。</p>
+      <div class="pirate-ability-actions">
+        <button type="button" class="btn btn-gold" data-act="pirate-bendt-confirm" ${n === 2 ? "" : "disabled"}>確定棄牌</button>
+      </div>`;
+  } else if (ab.id === "rascal") {
+    body = `<p>旁注 0、10 定 20 分？呢局估中叫牌就加呢啲分，估唔中就扣。</p>
+      <div class="pirate-ability-actions">
+        <button type="button" class="btn btn-sheet" data-act="pirate-rascal" data-bet="0">0 分</button>
+        <button type="button" class="btn btn-gold" data-act="pirate-rascal" data-bet="10">10 分</button>
+        <button type="button" class="btn btn-gold" data-act="pirate-rascal" data-bet="20">20 分</button>
+      </div>`;
+  } else if (ab.id === "juanita") {
+    const cards = ab.undealtCards || [];
+    const grid = cards.length
+      ? `<div class="juanita-grid">${cards.map((c) => `<div class="juanita-card">${cardFaceHTML(c, { compact: true })}</div>`).join("")}</div>`
+      : `<p>呢一局已經冇剩低未發嘅牌。</p>`;
+    body = `<p>以下係呢一局未發嘅牌，只有你睇到。</p>${grid}
+      <div class="pirate-ability-actions"><button type="button" class="btn btn-gold" data-act="pirate-juanita-done">睇完</button></div>`;
+  } else if (ab.id === "harry") {
+    const bid = ab.bid ?? 0;
+    const max = ab.cardsDealt ?? bid;
+    const minus = bid <= 0 ? "disabled" : "";
+    const plus = bid >= max ? "disabled" : "";
+    body = `<p>而家叫牌係 ${bid}。你可以 +1、−1，或者保持不變。</p>
+      <div class="pirate-ability-actions">
+        <button type="button" class="btn btn-sheet" data-act="pirate-harry" data-delta="-1" ${minus}>−1</button>
+        <button type="button" class="btn btn-gold" data-act="pirate-harry" data-delta="0">不變</button>
+        <button type="button" class="btn btn-sheet" data-act="pirate-harry" data-delta="1" ${plus}>+1</button>
+      </div>`;
+  } else {
+    body = `<p>${escapeHtml(pirateAbilityHelp(ab) || "請使用呢個海盜能力。")}</p>`;
+  }
+  return `<div class="pirate-ability-overlay" role="dialog" aria-label="海盜能力">
+    <div class="pirate-ability-card">
+      <div class="pirate-ability-kicker">海盜能力</div>
+      <h2>${title}</h2>
+      ${body}
+    </div>
+  </div>`;
 }
 
 function tigressHTML() {
@@ -2909,7 +3009,7 @@ function scoreHTML(v) {
         <td>${escapeHtml(r.playerName)}${mine ? "（你）" : ""}</td>
         <td>${r.bid}／${r.taken}<span class="made-tag ${made ? "ok" : "bad"}">${made ? "估中" : "估錯"}</span></td>
         <td class="${r.bidPoints < 0 ? "neg" : r.bidPoints > 0 ? "pos" : ""}">${signed(r.bidPoints)}</td>
-        <td>${r.bonus === 0 ? "–" : "+" + r.bonus}</td>
+        <td>${r.bonus === 0 ? "–" : "+" + r.bonus}${r.rascalPoints ? `　旁注 ${signed(r.rascalPoints)}` : ""}</td>
         <td class="${r.roundTotal < 0 ? "neg" : r.roundTotal > 0 ? "pos" : ""}">${signed(r.roundTotal)}</td>
         <td><strong>${r.runningTotal}</strong></td>
       </tr>`;
@@ -2922,7 +3022,7 @@ function scoreHTML(v) {
     const kicker = made ? "叫中！" : busted ? "爆咗" : "贏唔夠回合";
     mineSummary = `<div class="score-hero ${made ? "made" : busted ? "missed bust" : "missed short"}">
       <div class="hero-kicker">${kicker}</div>
-      <p>你叫 ${meRow.bid} 贏 ${meRow.taken}，叫牌分 ${signed(meRow.bidPoints)}${meRow.bonus ? `，獎勵 +${meRow.bonus}` : ""}，本局 ${signed(meRow.roundTotal)}</p>
+      <p>你叫 ${meRow.bid} 贏 ${meRow.taken}，叫牌分 ${signed(meRow.bidPoints)}${meRow.bonus ? `，獎勵 +${meRow.bonus}` : ""}${meRow.rascalPoints ? `，旁注 ${signed(meRow.rascalPoints)}` : ""}，本局 ${signed(meRow.roundTotal)}</p>
       <div class="hero-total">總分 <strong>${meRow.runningTotal}</strong></div>
     </div>`;
   }
@@ -2988,6 +3088,13 @@ function renderRules() {
         <p>如果第一張係逃脫或「母老虎當逃脫」，之後第一張數字牌先定花。如果第一張係人魚、海盜、骷髏王、「母老虎當海盜」、八爪魚或白鯨，呢個回合就冇得跟花，各人可以出任何牌。如果花色已經定咗，之後先出白鯨，之後出數字牌嘅人仍然要跟嗰個已定花色。</p>
         <h3 style="color:var(--gold)">誰贏呢個回合</h3>
         <p>人魚可以捕獲骷髏王。骷髏王大過海盜。海盜大過人魚同所有數字牌。幾個海盜或者兩條人魚一齊出現，先出嗰張贏。如果人魚、海盜同骷髏王同時出現，一定係人魚贏，而且只計人魚捕骷髏王嘅獎勵。全部都係逃脫，就由先出嗰個人贏。出母老虎時要即時宣布當海盜定逃脫。</p>
+        <h3 style="color:var(--gold)">進階海盜能力</h3>
+        <p>呢個版本啟用官方 2021 年進階海盜能力。你必須用嗰張具名海盜自己贏回合先觸發（淨係捕獲對手出嘅海盜唔算）。能力要即時使用，唔會留到下一局。母老虎當海盜出冇獨特能力。巨人哈利（Harry the Giant）喺一局最後一回合贏咗都可以用；其餘四個能力喺最後一回合唔會發動，因為已經冇作用。</p>
+        <p><strong>蘿茜·德蘭尼（Rosie D'Laney，Big Mum）</strong>：揀邊個做下一回合領牌，包括你自己。</p>
+        <p><strong>大盜賓特（Bendt the Bandit，Marshall D. Teach）</strong>：從呢一局剩低未發嘅牌加 2 張入手，然後從手牌棄 2 張。</p>
+        <p><strong>羅阿坦惡漢（Rascal of Roatan，Shanks）</strong>：旁注 0、10 或 20 分。呢局估中叫牌就加呢啲分，估唔中就扣。</p>
+        <p><strong>胡安妮塔（Juanita Jade，Kaido）</strong>：私下睇呢一局未發嘅牌（其他人睇唔到）。</p>
+        <p><strong>巨人哈利（Harry the Giant，Edward Newgate）</strong>：可以將自己嘅叫牌 +1、−1，或者保持不變。</p>
         <p>八爪魚會食咗整個回合：無人贏、牌亦唔算被捕獲（冇捕獲獎勵）。下一回合由「如果冇出八爪魚會贏嗰個人」先出。</p>
         <p>白鯨會令特殊牌全部作廢、唔可以贏回合；所有數字牌都唔再分花色同王牌，由點數最高嗰張贏（相同點數就由先出嗰張贏）。如果呢個回合淨係特殊牌，就好似八爪魚咁作廢，下一回合由出白鯨嗰個人先出。數字牌喺白鯨之下贏回合，可以收埋呢個回合嘅牌，亦可以計 14 嘅獎勵，但人魚、海盜、骷髏王嘅捕獲獎勵就唔計。</p>
         <p>如果同一回合既有八爪魚又有白鯨，得第二張出嘅獸牌有效，第一張當逃脫。若八爪魚係後出，呢個回合作廢，下一回合由「兩張獸牌都冇出過會贏嗰個人」先出。一局最後一回合如果作廢，就直接完局，無人贏嗰個回合。因為有回合會被食咗，一局贏回合總數可以少過派牌張數；叫 0 仍然係按呢局張數加減 10 分。</p>

@@ -12,7 +12,8 @@ import {
   currentTrickLead,
   explainTrick,
 } from "./rules.js";
-import { bid as aiBid, choosePlay as aiChoosePlay } from "./ai.js";
+import { bid as aiBid, choosePlay as aiChoosePlay, choosePirateAbility as aiChoosePirateAbility } from "./ai.js";
+import { winningPirateAbility, pirateAbilityByCopyIndex } from "../public/pirates.js";
 
 export const PHASE = {
   BIDDING: "bidding",
@@ -49,6 +50,7 @@ export class Game {
       tricksWon: 0,
       potentialBonus: 0,
       bonusDetails: [],
+      rascalBet: 0,
       score: 0,
     }));
     this.phase = PHASE.BIDDING;
@@ -65,6 +67,9 @@ export class Game {
     this.previousTrick = null;
     this.roundTrickLog = [];
     this.pendingTigress = null;
+    this.pendingAbility = null;
+    this.deck = [];
+    this.discards = [];
     this.scores = [];
     this.tricksPlayed = 0;
     this.statusMessage = "";
@@ -94,7 +99,11 @@ export class Game {
       player.tricksWon = 0;
       player.potentialBonus = 0;
       player.bonusDetails = [];
+      player.rascalBet = 0;
     }
+    this.deck = deck;
+    this.discards = [];
+    this.pendingAbility = null;
     this.trick = [];
     this.lastTrick = [];
     this.lastWinnerIndex = null;
@@ -278,6 +287,21 @@ export class Game {
     });
     this.trick = [];
     this.tricksPlayed += 1;
+    this.pendingAbility = null;
+    if (!result.destroyed && result.winnerPlayerIndex != null) {
+      const winPlay = this.lastTrick.find((p) => p.playerIndex === result.winnerPlayerIndex);
+      const info = winningPirateAbility(winPlay, { lastTrickOfRound: lastOfRound });
+      if (info) {
+        this.pendingAbility = {
+          id: info.id,
+          copyIndex: winPlay.card.copyIndex ?? 0,
+          playerIndex: result.winnerPlayerIndex,
+        };
+        if (info.id === "bendt") this._bendtDraw();
+        const actor = this.players[result.winnerPlayerIndex];
+        this.statusMessage = `${this.statusMessage} ${actor.name}用${info.chineseName}贏回合，要即時使用能力。`;
+      }
+    }
     this.phase = PHASE.TRICK_RESULT;
     this.revision++;
   }
@@ -299,6 +323,7 @@ export class Game {
 
   advanceTrickResult() {
     if (this.phase !== PHASE.TRICK_RESULT) return { error: "而家唔係回合結果。" };
+    if (this.pendingAbility) return { error: "請先使用海盜能力。", needAbility: true };
     this.previousTrick = this._snapshotPreviousTrick();
     const leader = this.lastNextLeaderIndex ?? this.lastWinnerIndex ?? this.currentPlayerIndex;
     if (this.players.every((p) => p.hand.length === 0)) {
@@ -320,6 +345,7 @@ export class Game {
         player.tricksWon,
         this.cardsDealt,
         player.potentialBonus,
+        player.rascalBet ?? 0,
       );
       player.score += result.total;
       rows.push({
@@ -329,6 +355,7 @@ export class Game {
         taken: player.tricksWon,
         bidPoints: result.bidPoints,
         bonus: result.bonus,
+        rascalPoints: result.rascalPoints,
         roundTotal: result.total,
         runningTotal: player.score,
       });
@@ -399,6 +426,14 @@ export class Game {
         ? "請揀母老虎當海盜定逃脫。"
         : `等${current?.name || "對手"}揀母老虎當海盜定逃脫。`;
     }
+    if (this.pendingAbility) {
+      const actor = this.players[this.pendingAbility.playerIndex];
+      const info = pirateAbilityByCopyIndex(this.pendingAbility.copyIndex);
+      const who = info ? `${info.chineseName}` : "海盜能力";
+      return actor?.id === playerId
+        ? `你用${who}贏咗呢個回合，請即時使用能力。`
+        : `等${actor?.name || "對手"}使用${who}嘅能力。`;
+    }
     if (this.phase !== PHASE.PLAYING && this.phase !== PHASE.TRICK_RESULT) return "";
     const trick = this.phase === PHASE.TRICK_RESULT ? this.lastTrick : this.trick;
     if (!trick.length) {
@@ -413,6 +448,119 @@ export class Game {
       return `而家要跟${info.shortName}色（${info.chineseName}）。你有呢種花就要跟；特殊牌隨時可出。`;
     }
     return "呢個回合由特殊牌先出，冇得跟花，可以出任何牌。";
+  }
+
+
+  _bendtDraw() {
+    const actor = this.players[this.pendingAbility.playerIndex];
+    const take = Math.min(2, this.deck.length);
+    const drawn = this.deck.slice(0, take);
+    this.deck = this.deck.slice(take);
+    if (drawn.length) {
+      actor.hand = sortHand([...actor.hand, ...drawn]);
+    }
+    this.pendingAbility.drawnIds = drawn.map((c) => c.id);
+    this.pendingAbility.drawnCount = drawn.length;
+  }
+
+  _abilityView(playerId) {
+    if (this.phase !== PHASE.TRICK_RESULT || !this.pendingAbility) return null;
+    const info = pirateAbilityByCopyIndex(this.pendingAbility.copyIndex);
+    if (!info) return null;
+    const actor = this.players[this.pendingAbility.playerIndex];
+    const mine = actor?.id === playerId;
+    const view = {
+      id: info.id,
+      officialName: info.officialName,
+      chineseName: info.chineseName,
+      artName: info.artName,
+      artFile: info.artFile,
+      skill: info.skill,
+      copyIndex: this.pendingAbility.copyIndex,
+      playerIndex: this.pendingAbility.playerIndex,
+      playerId: actor?.id,
+      playerName: actor?.name,
+      isMine: mine,
+      lastTrickOfRound: this.players.every((p) => p.hand.length === 0) && info.id === "harry",
+      drawnCount: this.pendingAbility.drawnCount ?? 0,
+    };
+    if (mine && info.id === "juanita") {
+      view.undealtCards = this.deck.map((c) => ({ ...c }));
+    }
+    if (mine && info.id === "harry") {
+      view.bid = actor.bid ?? 0;
+      view.cardsDealt = this.cardsDealt;
+    }
+    return view;
+  }
+
+  usePirateAbility(playerId, choice = {}) {
+    if (this.phase !== PHASE.TRICK_RESULT || !this.pendingAbility) {
+      return { error: "而家唔使使用海盜能力。" };
+    }
+    const actor = this.players[this.pendingAbility.playerIndex];
+    if (!actor || actor.id !== playerId) return { error: "而家唔係你使用海盜能力。" };
+    const info = pirateAbilityByCopyIndex(this.pendingAbility.copyIndex);
+    if (!info || info.id !== this.pendingAbility.id) return { error: "找不到呢個海盜能力。" };
+
+    if (info.id === "rosie") {
+      const leaderIndex = Number(choice.leaderIndex);
+      if (!Number.isInteger(leaderIndex) || leaderIndex < 0 || leaderIndex >= this.players.length) {
+        return { error: "請揀邊個做下一回合領牌。" };
+      }
+      this.lastNextLeaderIndex = leaderIndex;
+      const lead = this.players[leaderIndex];
+      this.statusMessage = `${actor.name}用${info.chineseName}，下一回合由${lead.name}先出。`;
+    } else if (info.id === "bendt") {
+      const ids = Array.isArray(choice.discardIds) ? [...new Set(choice.discardIds.map(String))] : [];
+      if (ids.length !== 2) return { error: "請從手牌揀 2 張棄掉。" };
+      const picked = ids.map((id) => actor.hand.find((c) => c.id === id));
+      if (picked.some((c) => !c)) return { error: "要棄嘅牌唔喺你手上。" };
+      actor.hand = sortHand(actor.hand.filter((c) => !ids.includes(c.id)));
+      this.discards.push(...picked);
+      this.statusMessage = `${actor.name}用${info.chineseName}，加牌後棄咗 2 張。`;
+    } else if (info.id === "rascal") {
+      const bet = Number(choice.bet);
+      if (![0, 10, 20].includes(bet)) return { error: "旁注只可以係 0、10 或 20 分。" };
+      actor.rascalBet = bet;
+      this.statusMessage = bet
+        ? `${actor.name}用${info.chineseName}，旁注 ${bet} 分。`
+        : `${actor.name}用${info.chineseName}，唔旁注。`;
+    } else if (info.id === "juanita") {
+      this.statusMessage = `${actor.name}用${info.chineseName}，已私下睇過未發嘅牌。`;
+    } else if (info.id === "harry") {
+      const delta = Number(choice.delta);
+      if (![ -1, 0, 1 ].includes(delta)) return { error: "請揀將叫牌 +1、−1，或者保持不變。" };
+      const next = (actor.bid ?? 0) + delta;
+      if (next < 0 || next > this.cardsDealt) {
+        return { error: "叫牌唔可以細過 0，亦唔可以大過呢局張數。" };
+      }
+      actor.bid = next;
+      this.statusMessage = delta === 0
+        ? `${actor.name}用${info.chineseName}，叫牌保持 ${actor.bid}。`
+        : `${actor.name}用${info.chineseName}，叫牌改為 ${actor.bid}。`;
+    } else {
+      return { error: "未知海盜能力。" };
+    }
+
+    this.pendingAbility = null;
+    this.revision++;
+    return { ok: true };
+  }
+
+  stepPirateAbilityAI() {
+    if (this.phase !== PHASE.TRICK_RESULT || !this.pendingAbility) return { waited: true };
+    const actor = this.players[this.pendingAbility.playerIndex];
+    if (!actor?.isAI) return { waited: true };
+    const info = pirateAbilityByCopyIndex(this.pendingAbility.copyIndex);
+    const choice = aiChoosePirateAbility({
+      id: info?.id,
+      player: actor,
+      players: this.players,
+      cardsDealt: this.cardsDealt,
+      tricksLeft: this.cardsDealt - this.tricksPlayed,
+    });
+    return this.usePirateAbility(actor.id, choice);
   }
 
   viewFor(playerId) {
@@ -478,6 +626,7 @@ export class Game {
         this.pendingTigress &&
         this.pendingTigress.playerId === playerId
       ),
+      pendingAbility: this._abilityView(playerId),
       trick: showTrick.map((p) => ({
         playerIndex: p.playerIndex,
         playerName: this.players[p.playerIndex]?.name,

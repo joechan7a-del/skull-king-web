@@ -396,7 +396,7 @@ export function bonusPoints(trick, winnerPlayerIndex) {
 }
 
 /** Classic scoring. Bonus is only kept if the bid is made. */
-export function scoreRound(bid, taken, cardsDealt, bonus) {
+export function scoreRound(bid, taken, cardsDealt, bonus, rascalBet = 0) {
   const made = bid === taken;
   let bidPoints;
   if (made) {
@@ -405,7 +405,9 @@ export function scoreRound(bid, taken, cardsDealt, bonus) {
     bidPoints = bid === 0 ? -10 * cardsDealt : -10 * Math.abs(taken - bid);
   }
   const awardedBonus = made ? bonus : 0;
-  return { bidPoints, bonus: awardedBonus, total: bidPoints + awardedBonus };
+  const bet = Number(rascalBet) || 0;
+  const rascalPoints = bet ? (made ? bet : -bet) : 0;
+  return { bidPoints, bonus: awardedBonus, rascalPoints, total: bidPoints + awardedBonus + rascalPoints };
 }
 
 

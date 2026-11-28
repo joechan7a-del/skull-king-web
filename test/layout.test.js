@@ -62,7 +62,7 @@ test("the felt keeps a locked mid-trick proportion on every in-game screen", () 
   assert.match(render, /circleTableHTML\(v\)/);
   const dockChunk = render.slice(render.indexOf("table-dock"), render.indexOf("pendingTigress"));
   assert.doesNotMatch(dockChunk, /circleTableHTML/);
-  assert.match(html, /app\.js\?v=c28/);
+  assert.match(html, /app\.js\?v=c29/);
   // overlays must stay out of the table flex flow
   assert.match(css, /\.confirm-bar\s*\{[^}]*position:\s*absolute/s);
   const banner = block(css, ".banner");
@@ -105,7 +105,7 @@ test("the table uses the full wrap and seats sit near the outer edge", () => {
 test("played cards stay on the rim and cues stay off the felt", () => {
   assert.match(css, /--card-in/);
   const card = block(css, ".seat-card");
-  assert.match(card, /var\(--card-in\)/);
+  assert.match(card, /var\(--card-place\)/);
   assert.doesNotMatch(card, /translateY\(-5[08]px\)/);
   const feltIdx = js.indexOf("table-felt felt-rich");
   const feltLine = js.slice(feltIdx, feltIdx + 220);
@@ -197,7 +197,7 @@ test("trick and round results are overlay dialogs and do not shrink the table", 
   const score = js.slice(js.indexOf("function scoreHTML"), js.indexOf("function renderRules"));
   assert.match(score, /class="overlay center"/);
   assert.match(score, /下一局/);
-  assert.match(html, /app\.js\?v=c28/);
+  assert.match(html, /app\.js\?v=c29/);
 });
 
 test("AI plays and post-win pauses are modestly longer", () => {
@@ -331,9 +331,9 @@ test("rules copy describes the 74-card house deck", () => {
   assert.doesNotMatch(js, /牌組 72 張：/);
 });
 
-test("cache bust is c28 and the site uses a licensed HK webfont", () => {
-  assert.match(html, /app\.js\?v=c28/);
-  assert.match(html, /styles\.css\?v=c28/);
+test("cache bust is c29 and the site uses a licensed HK webfont", () => {
+  assert.match(html, /app\.js\?v=c29/);
+  assert.match(html, /styles\.css\?v=c29/);
   assert.match(html, /fonts\.googleapis\.com/);
   assert.match(html, /Chiron\+Hei\+HK/);
   assert.match(css, /"Chiron Hei HK"/);
@@ -505,7 +505,7 @@ test("the five-player table stays centered and side seat info stays on screen", 
   assert.match(css, /\.circle-wrap \{ padding: 22px 30px 36px; \}/);
   assert.match(css, /\.circle-wrap \{ padding: 32px 30px 48px; \}/);
   const fn = js.slice(js.indexOf("function seatRadii"), js.indexOf("function seatRadii") + 500);
-  assert.match(fn, /n === 5\) return \{ rx: 34, ry: 42 \}/);
+  assert.match(fn, /n === 5\) return \{ rx: 34, ry: 36 \}/);
   const left = block(css, ".seat.place-left .seat-meta");
   const right = block(css, ".seat.place-right .seat-meta");
   assert.match(left, /right:\s*16px/);
@@ -535,7 +535,7 @@ test("the opening-lead lottery is shorter but still drawn at random", () => {
   assert.match(draw, /openingLeaderName/);
 });
 
-test("playing a card does not flash black; only specials get a modest slam", () => {
+test("playing a card does not flash black; only specials get a longer exaggerated slam", () => {
   const inner = block(css, ".sk-card.has-art .sk-card-inner");
   assert.match(inner, /background:\s*transparent/);
   assert.doesNotMatch(css, /#120e0a/);
@@ -543,7 +543,9 @@ test("playing a card does not flash black; only specials get a modest slam", () 
   assert.match(js, /justPlayed && played\.card\.special \? " special-slam"/);
   assert.match(css, /@keyframes special-slam/);
   const slam = css.slice(css.indexOf("@keyframes special-slam"), css.indexOf("@keyframes special-slam") + 500);
-  assert.match(slam, /scale\(1\.72\)/);
+  assert.match(slam, /scale\(2\.48\)/);
+  assert.match(css, /special-slam 1\.28s/);
+  assert.match(js, /animatingPlayIds\.delete\(cardId\), 1500/);
   assert.doesNotMatch(css, /@keyframes card-slam/);
 });
 
@@ -554,4 +556,19 @@ test("corner badges sit inside the frame and colour-suit ranks stay bold", () =>
   assert.match(opt, /bolden_rank_numbers/);
   assert.match(opt, /COLOR_SUITS/);
   assert.doesNotMatch(opt, /CORNER_SHIFT = 26/);
+});
+
+test("the felt is a slightly flatter oval and the five trick cards sit in even inner slots", () => {
+  const felt = block(css, ".table-felt");
+  assert.match(felt, /width:\s*min\(86cqw/);
+  assert.match(felt, /height:\s*min\(70cqh/);
+  assert.match(felt, /border-radius:\s*50%/);
+  assert.match(css, /--card-rx/);
+  assert.match(css, /--card-ry/);
+  assert.match(css, /--card-place/);
+  assert.match(js, /--card-ux/);
+  assert.match(js, /--card-uy/);
+  const arrows = js.slice(js.indexOf("function tableArrowsSVG"), js.indexOf("function resetTrickAnim"));
+  assert.match(arrows, /const rx = 18;/);
+  assert.match(arrows, /const ry = 18;/);
 });

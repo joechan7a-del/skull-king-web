@@ -266,9 +266,24 @@ export class RoomManager {
     return result;
   }
 
+  usePirateAbility(room, playerId, choice = {}) {
+    if (!room.game) return { error: "遊戲尚未開始。" };
+    const result = room.game.usePirateAbility(playerId, choice);
+    if (result.error) return result;
+    this.touch(room);
+    if (!room.game.pendingAbility && room.game.phase === PHASE.TRICK_RESULT && room.trickExplanationShown) {
+      this._clearTimer(room);
+      const next = room.game.advanceTrickResult();
+      if (next.error) return next;
+    }
+    this.schedule(room);
+    return result;
+  }
+
   continueRound(room, playerId) {
     if (!room.game) return { error: "遊戲尚未開始。" };
     if (room.game.phase === PHASE.TRICK_RESULT) {
+      if (room.game.pendingAbility) return { error: "請先使用海盜能力。" };
       if (!room.trickExplanationShown) return { ok: true, waiting: true };
       this._clearTimer(room);
       const result = room.game.advanceTrickResult();
@@ -326,8 +341,24 @@ export class RoomManager {
         }, delay);
         return;
       }
+      if (game.pendingAbility) {
+        const actor = game.players[game.pendingAbility.playerIndex];
+        if (actor?.isAI) {
+          room.timer = setTimeout(() => {
+            if (!room.game || room.game.phase !== PHASE.TRICK_RESULT || !room.game.pendingAbility) return;
+            room.game.stepPirateAbilityAI();
+            this.broadcast(room);
+            this.schedule(room);
+          }, AI_PAUSE_MS);
+        }
+        return;
+      }
       room.timer = setTimeout(() => {
         if (!room.game || room.game.phase !== PHASE.TRICK_RESULT) return;
+        if (room.game.pendingAbility) {
+          this.schedule(room);
+          return;
+        }
         room.trickExplanationShown = false;
         room.game.advanceTrickResult();
         this.broadcast(room);
