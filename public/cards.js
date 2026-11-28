@@ -114,14 +114,13 @@ export function cardFaceLabel(card, { tigressAsPirate = null } = {}) {
   return "";
 }
 
-export function cardFaceHTML(card, { dimmed = false, tigressAsPirate = null, compact = false, animated = false } = {}) {
+export function cardFaceHTML(card, { dimmed = false, tigressAsPirate = null, compact = false } = {}) {
   const cls = [
     "sk-card",
     "has-art",
     kindClass(card),
     dimmed ? "dimmed" : "",
     compact ? "compact" : "",
-    animated ? "is-preview-live" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -131,13 +130,9 @@ export function cardFaceHTML(card, { dimmed = false, tigressAsPirate = null, com
   const declared = card.special === "tigress" && tigressAsPirate != null
     ? `<span class="sk-card-flag">${tigressAsPirate ? "當海盜" : "當逃脫"}</span>`
     : "";
-  const live = animated
-    ? `<div class="sk-card-bob-clip" aria-hidden="true"><img class="sk-card-bob" src="${escapeAttr(src)}" alt="" draggable="false" width="784" height="1100"></div><div class="sk-card-vfx" aria-hidden="true"></div>`
-    : "";
   return `<div class="${cls}" data-id="${escapeAttr(card.id)}" role="img" aria-label="${escapeAttr(label)}">
     <div class="sk-card-inner">
       <img class="sk-card-art" src="${escapeAttr(src)}" alt="${escapeAttr(label)}" draggable="false" width="784" height="1100">
-      ${live}
       ${declared}
     </div>
   </div>`;

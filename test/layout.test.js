@@ -62,7 +62,7 @@ test("the felt keeps a locked mid-trick proportion on every in-game screen", () 
   assert.match(render, /circleTableHTML\(v\)/);
   const dockChunk = render.slice(render.indexOf("table-dock"), render.indexOf("pendingTigress"));
   assert.doesNotMatch(dockChunk, /circleTableHTML/);
-  assert.match(html, /app\.js\?v=c26/);
+  assert.match(html, /app\.js\?v=c27/);
   // overlays must stay out of the table flex flow
   assert.match(css, /\.confirm-bar\s*\{[^}]*position:\s*absolute/s);
   const banner = block(css, ".banner");
@@ -197,7 +197,7 @@ test("trick and round results are overlay dialogs and do not shrink the table", 
   const score = js.slice(js.indexOf("function scoreHTML"), js.indexOf("function renderRules"));
   assert.match(score, /class="overlay center"/);
   assert.match(score, /下一局/);
-  assert.match(html, /app\.js\?v=c26/);
+  assert.match(html, /app\.js\?v=c27/);
 });
 
 test("AI plays and post-win pauses are modestly longer", () => {
@@ -331,9 +331,9 @@ test("rules copy describes the 74-card house deck", () => {
   assert.doesNotMatch(js, /牌組 72 張：/);
 });
 
-test("cache bust is c26 and the site uses a licensed HK webfont", () => {
-  assert.match(html, /app\.js\?v=c26/);
-  assert.match(html, /styles\.css\?v=c26/);
+test("cache bust is c27 and the site uses a licensed HK webfont", () => {
+  assert.match(html, /app\.js\?v=c27/);
+  assert.match(html, /styles\.css\?v=c27/);
   assert.match(html, /fonts\.googleapis\.com/);
   assert.match(html, /Chiron\+Hei\+HK/);
   assert.match(css, /"Chiron Hei HK"/);
@@ -447,17 +447,19 @@ test("輪到你出牌 sits in the hand tray and pulses, not in the top cue row",
   assert.match(css, /\.hand-tray-mid/);
 });
 
-test("the inspect preview animates the character; hand and table cards stay still", () => {
+test("preview, hand, and table cards are static still images with no card animation", () => {
   const inspectFn = js.slice(js.indexOf("function inspectHTML"), js.indexOf("function renderHome"));
-  assert.match(inspectFn, /animated:\s*true/);
-  const table = js.slice(js.indexOf("function renderTable"), js.indexOf("function handOverlap"));
-  assert.doesNotMatch(table, /animated:\s*true/);
-  assert.match(cards, /animated = false/);
-  assert.match(cards, /sk-card-bob/);
-  assert.match(cards, /sk-card-vfx/);
-  assert.match(css, /@keyframes card-char-bob/);
-  assert.match(css, /0\.55s/);
-  assert.match(css, /@keyframes card-vfx-spin/);
+  assert.doesNotMatch(inspectFn, /animated:\s*true/);
+  assert.doesNotMatch(js, /animated:\s*true/);
+  assert.doesNotMatch(cards, /animated = false/);
+  assert.doesNotMatch(cards, /sk-card-bob/);
+  assert.doesNotMatch(cards, /sk-card-vfx/);
+  assert.doesNotMatch(cards, /is-preview-live/);
+  assert.doesNotMatch(css, /@keyframes card-char-bob/);
+  assert.doesNotMatch(css, /@keyframes card-vfx-spin/);
+  assert.doesNotMatch(css, /sk-card-bob/);
+  assert.doesNotMatch(js, /\.gif/i);
+  assert.doesNotMatch(cards, /\.gif/i);
 });
 
 test("corner badges sit inside the frame and colour-suit ranks stay bold", () => {

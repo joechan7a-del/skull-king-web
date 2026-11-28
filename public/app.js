@@ -2055,7 +2055,7 @@ function inspectHTML() {
   return `<div class="overlay center" data-act="close-inspect">
     <div class="sheet inspect-sheet inspect-card-sheet" data-stop="1" data-sheet-dismiss="close-inspect">
       ${sheetHandleHTML()}
-      <div class="inspect-card${ins.why ? " illegal-shake" : ""}">${cardFaceHTML(card, { tigressAsPirate: ins.tigressAsPirate, animated: true })}</div>
+      <div class="inspect-card${ins.why ? " illegal-shake" : ""}">${cardFaceHTML(card, { tigressAsPirate: ins.tigressAsPirate })}</div>
       <h2>${escapeHtml(title)}</h2>
       <p>${escapeHtml(help)}</p>
       ${ins.why ? `<p class="why-line">${escapeHtml(ins.why)}</p>` : ""}

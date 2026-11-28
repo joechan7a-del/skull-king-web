@@ -44,7 +44,7 @@ test("home room-code boxes start empty, lock autofill, and sanitize on bind", ()
   assert.match(app, /data-1p-ignore="true"/);
   assert.match(app, /sweepAutofill|sweepCodeBoxes/);
   assert.match(app, /removeAttribute\("readonly"\)/);
-  assert.match(html, /app\.js\?v=c26/);
+  assert.match(html, /app\.js\?v=c27/);
 });
 
 test("room codes are always four characters and the home form has four boxes", () => {
